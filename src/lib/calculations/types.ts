@@ -7,6 +7,18 @@ export interface EmploymentRecord {
   salarioBaseCotizacion: number;
 }
 
+export interface Movement {
+  type: "BAJA" | "REINGRESO" | "MODIFICACION DE SALARIO";
+  fecha: Date;
+  salario: number;
+}
+
+export interface SalaryPeriod {
+  fechaInicio: Date;
+  fechaFin: Date;
+  salarioDiario: number;
+}
+
 export interface DocumentHeader {
   nombre: string;
   nss: string;
@@ -20,6 +32,8 @@ export interface DocumentHeader {
 export interface ParsedDocument {
   header: DocumentHeader;
   records: EmploymentRecord[];
+  movements: Movement[];
+  salaryPeriods: SalaryPeriod[];
 }
 
 export interface PeriodAfore {

@@ -3,8 +3,8 @@ import { calculateSalaryAverage } from "./salary-average";
 import { calculateAfore } from "./afore-balance";
 
 export function calculateAll(document: ParsedDocument): CalculationResult {
-  const salaryAverage = calculateSalaryAverage(document.records);
-  const afore = calculateAfore(document.records);
+  const salaryAverage = calculateSalaryAverage(document.salaryPeriods);
+  const afore = calculateAfore(document.salaryPeriods);
 
   return {
     header: document.header,
