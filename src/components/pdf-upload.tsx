@@ -9,6 +9,8 @@ interface PdfUploadProps {
   isProcessing: boolean;
 }
 
+const MAX_WORKERS = 4;
+
 export function PdfUpload({ onTextExtracted, isProcessing }: PdfUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [ocrProgress, setOcrProgress] = useState<string | null>(null);
@@ -31,7 +33,6 @@ export function PdfUpload({ onTextExtracted, isProcessing }: PdfUploadProps) {
       setOcrPercent(5);
 
       try {
-        // Dynamically import heavy libraries
         const pdfjsLib = await import("pdfjs-dist");
         pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
           "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -42,49 +43,85 @@ export function PdfUpload({ onTextExtracted, isProcessing }: PdfUploadProps) {
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         const numPages = pdf.numPages;
 
-        setOcrProgress(`PDF cargado. ${numPages} páginas encontradas. Iniciando OCR...`);
+        setOcrProgress(`PDF cargado. ${numPages} páginas. Extrayendo texto...`);
         setOcrPercent(10);
 
-        // Import tesseract.js
-        const Tesseract = (await import("tesseract.js")).default;
-
-        // Create a scheduler for parallel processing
-        const worker = await Tesseract.createWorker("spa+eng", undefined, {
-          logger: (m: { status: string; progress: number }) => {
-            if (m.status === "recognizing text") {
-              const pageProgress = m.progress * 100;
-              setOcrPercent(Math.round(10 + pageProgress * 0.85));
-            }
-          },
-        });
-
+        // ── Strategy 1: Try native text extraction (instant for digital PDFs) ──
         let fullText = "";
+        let nativeTextLength = 0;
 
         for (let i = 1; i <= numPages; i++) {
-          setOcrProgress(`Procesando página ${i} de ${numPages}...`);
-
           const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const pageText = content.items
+            .map((item) => ("str" in item ? (item as { str: string }).str : ""))
+            .join(" ");
+          fullText += `\n--- PAGE ${i} ---\n` + pageText + "\n";
+          nativeTextLength += pageText.replace(/\s/g, "").length;
+        }
+
+        // If native extraction got enough text, use it (no OCR needed)
+        // Threshold: at least 50 non-whitespace chars per page on average
+        if (nativeTextLength > numPages * 50) {
+          setOcrProgress("Texto extraido directamente (PDF digital).");
+          setOcrPercent(95);
+          onTextExtracted(fullText);
+          return;
+        }
+
+        // ── Strategy 2: OCR with parallel workers (for scanned PDFs) ──
+        setOcrProgress("PDF escaneado detectado. Iniciando OCR...");
+        setOcrPercent(15);
+
+        const Tesseract = (await import("tesseract.js")).default;
+        const workerCount = Math.min(MAX_WORKERS, numPages);
+
+        // Create scheduler with multiple workers
+        const scheduler = Tesseract.createScheduler();
+        for (let w = 0; w < workerCount; w++) {
+          const worker = await Tesseract.createWorker("spa");
+          scheduler.addWorker(worker);
+        }
+
+        setOcrProgress(`OCR con ${workerCount} workers en paralelo...`);
+        setOcrPercent(20);
+
+        // Render all pages to canvas and queue OCR jobs in parallel
+        let completedPages = 0;
+        const pageTexts: string[] = new Array(numPages).fill("");
+
+        const ocrPage = async (pageNum: number) => {
+          const page = await pdf.getPage(pageNum);
           const viewport = page.getViewport({ scale: 2.0 });
 
-          // Render page to canvas
           const canvas = document.createElement("canvas");
           canvas.width = viewport.width;
           canvas.height = viewport.height;
           const ctx = canvas.getContext("2d")!;
-
           await page.render({ canvasContext: ctx, viewport }).promise;
 
-          // OCR the canvas
-          const {
-            data: { text },
-          } = await worker.recognize(canvas);
-          fullText += text + "\n";
+          const { data: { text } } = await scheduler.addJob("recognize", canvas);
 
-          const progressPct = 10 + ((i / numPages) * 85);
-          setOcrPercent(Math.round(progressPct));
-        }
+          // Clean up canvas memory
+          canvas.width = 0;
+          canvas.height = 0;
 
-        await worker.terminate();
+          pageTexts[pageNum - 1] = `\n--- PAGE ${pageNum} ---\n` + text;
+
+          completedPages++;
+          const pct = 20 + (completedPages / numPages) * 75;
+          setOcrPercent(Math.round(pct));
+          setOcrProgress(`OCR: ${completedPages}/${numPages} páginas...`);
+        };
+
+        // Launch all pages concurrently — scheduler distributes across workers
+        await Promise.all(
+          Array.from({ length: numPages }, (_, i) => ocrPage(i + 1))
+        );
+
+        await scheduler.terminate();
+
+        fullText = pageTexts.join("\n");
 
         setOcrProgress("OCR completado. Calculando...");
         setOcrPercent(98);
@@ -185,7 +222,7 @@ export function PdfUpload({ onTextExtracted, isProcessing }: PdfUploadProps) {
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              El OCR puede tardar 1-2 minutos dependiendo del PDF
+              PDFs digitales: instantaneo. Escaneados: ~30s con OCR paralelo.
             </p>
           </div>
         ) : (

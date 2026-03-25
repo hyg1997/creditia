@@ -61,7 +61,7 @@ export function ResultsSummary({
         <CardContent>
           <p className="text-3xl font-bold">{totalSemanas}</p>
           <p className="text-xs text-muted-foreground mt-1">
-            {totalRecords} registros laborales
+            {totalRecords > 0 ? `${totalRecords} registros laborales` : "Datos extraidos del PDF"}
           </p>
         </CardContent>
       </Card>

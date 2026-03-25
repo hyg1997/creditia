@@ -18,7 +18,10 @@ export function parseOCRText(text: string): ParsedDocument {
   const header = parseHeader(text);
   const records = parseRecords(text);
   const movements = parseMovements(text);
-  let salaryPeriods = deriveSalaryPeriods(movements);
+
+  // Extract report emission date for "Vigente" (active employment) calculations
+  const reportDate = extractReportDate(text);
+  let salaryPeriods = deriveSalaryPeriods(movements, reportDate);
 
   // Fallback: if movement extraction yields no salary periods,
   // derive simple periods from employment records (one period per record)
@@ -33,11 +36,25 @@ export function parseOCRText(text: string): ParsedDocument {
   return { header, records, movements, salaryPeriods };
 }
 
+function extractReportDate(text: string): Date | undefined {
+  // Native: "Fecha de emisión del reporte 13   /   01   /   2026"
+  const native = text.match(/Fecha de emisi[oó]n del reporte\s+(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{4})/i);
+  if (native) {
+    return new Date(parseInt(native[3]), parseInt(native[2]) - 1, parseInt(native[1]));
+  }
+  // OCR: "Fecha de emisi6n del reporte\n\n27 / 01 / 2026"
+  const ocr = text.match(/Fecha de emisi[oó6]n del reporte\s+(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{4})/i);
+  if (ocr) {
+    return new Date(parseInt(ocr[3]), parseInt(ocr[2]) - 1, parseInt(ocr[1]));
+  }
+  return undefined;
+}
+
 function parseHeader(text: string): DocumentHeader {
   // Extract name - try multiple patterns
   let nombre = "";
 
-  // Pattern 1: Name after "Estimado(a)," (CamScanner PDFs)
+  // Pattern 1: Name after "Estimado(a)," (OCR multi-line PDFs)
   const nameMatch1 = text.match(
     /Estimado\(a\)[,.]?\s*\n+\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ ]+)/
   );
@@ -45,8 +62,7 @@ function parseHeader(text: string): DocumentHeader {
     nombre = nameMatch1[1].trim();
   }
 
-  // Pattern 2: Name appears before or after header, on its own line with all caps
-  // Common in digital IMSS PDFs where name is between header and NSS
+  // Pattern 2: Name on its own line after header (OCR)
   if (!nombre) {
     const nameMatch2 = text.match(
       /(?:persona asegurada|historial de registros)\s*\n+\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ ]{5,})/i
@@ -56,7 +72,17 @@ function parseHeader(text: string): DocumentHeader {
     }
   }
 
-  // Pattern 3: From the cadena original at the end of the document
+  // Pattern 3: Native PDF — "NSS: NAME NSSDIGITS"
+  if (!nombre) {
+    const nativeBlock = text.match(
+      /NSS:\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ ]+)\s+\d{10,11}/
+    );
+    if (nativeBlock) {
+      nombre = nativeBlock[1].trim();
+    }
+  }
+
+  // Pattern 4: From the cadena original (fallback for both native and OCR)
   if (!nombre) {
     const nameMatch3 = text.match(
       /Apellido Paterno[:\s]*([A-ZÁÉÍÓÚÑ]+)\|?.*?Apellido Materno[:\s]*([A-ZÁÉÍÓÚÑ]+)\|?.*?Nombre[^|]*[:\s]*([A-ZÁÉÍÓÚÑ ]+?)[\|]/i
@@ -69,11 +95,21 @@ function parseHeader(text: string): DocumentHeader {
 
   // Extract NSS
   const nssMatch = text.match(/NSS[:\s]+(\d[\d\s]+\d)/);
-  const nss = nssMatch ? nssMatch[1].replace(/\s/g, "") : "";
+  let nss = nssMatch ? nssMatch[1].replace(/\s/g, "") : "";
 
-  // Extract CURP
+  // Native PDF: "NSS: NAME 17856416379" — NSS is 11 digits after the name
+  if (!nss) {
+    const nssNative = text.match(/NSS:\s*[A-ZÁÉÍÓÚÑ ]+?\s+(\d{10,11})/);
+    if (nssNative) nss = nssNative[1];
+  }
+
+  // Extract CURP — try after "CURP:" label first, then before it (native PDF)
   const curpMatch = text.match(/CURP[:\s]+([A-Z0-9]{18})/i);
-  const curp = curpMatch ? curpMatch[1] : "";
+  let curp = curpMatch ? curpMatch[1] : "";
+  if (!curp) {
+    const curpNative = text.match(/(\w{4}\d{6}\w{8})\s+CURP/);
+    if (curpNative) curp = curpNative[1];
+  }
 
   // Extract total weeks
   let totalSemanasCotizadas = 0;
@@ -86,10 +122,10 @@ function parseHeader(text: string): DocumentHeader {
     totalSemanasCotizadas = parseInt(curpWeeksMatch[1], 10);
   }
 
-  // Try: explicit "Total de semanas cotizadas" followed by a number
+  // Try: explicit "Total de semanas cotizadas" followed by a number (OCR or native inline)
   if (!totalSemanasCotizadas) {
     const totalWeeksMatch = text.match(
-      /Total de semanas cotizadas\s*\n+\s*(\d{2,4})/i
+      /Total de semanas cotizadas\s+(\d{2,4})/i
     );
     if (totalWeeksMatch) {
       totalSemanasCotizadas = parseInt(totalWeeksMatch[1], 10);
@@ -120,14 +156,29 @@ function parseHeader(text: string): DocumentHeader {
   let semanasDescontadas = 0;
   let semanasReintegradas = 0;
 
-  // Try pattern: both numbers on one line after the labels section
+  // Try pattern: both numbers on one line after the labels section (OCR)
   const bothMatch = text.match(
     /Semanas Reintegradas\s*\(\+\)\s*\n+\s*(\d{1,4})\s+(\d{1,4})/i
   );
   if (bothMatch) {
     semanasDescontadas = parseInt(bothMatch[1], 10);
     semanasReintegradas = parseInt(bothMatch[2], 10);
-  } else {
+  }
+
+  // Native inline: "1112   149   0 Semanas cotizadas IMSS"
+  // where 1112=IMSS weeks, 149=descontadas, 0=reintegradas
+  if (!semanasDescontadas) {
+    const nativeWeeks = text.match(
+      /(\d{2,4})\s+(\d{1,4})\s+(\d{1,4})\s+Semanas cotizadas IMSS/i
+    );
+    if (nativeWeeks) {
+      semanasReconocidas = parseInt(nativeWeeks[1], 10);
+      semanasDescontadas = parseInt(nativeWeeks[2], 10);
+      semanasReintegradas = parseInt(nativeWeeks[3], 10);
+    }
+  }
+
+  if (!semanasDescontadas) {
     // Try separate extraction
     const descMatch = text.match(
       /Semanas Descontadas[\s\S]{0,80}?(?:recursos\)\s*\(-\))\s*\n?\s*(\d{1,4})/i
@@ -746,7 +797,26 @@ function nextNonBlankIsBlockHeader(lines: string[], fromIdx: number): boolean {
 }
 
 function parseMovements(text: string): Movement[] {
-  // Split text into pages
+  // ── Strategy 0: Native PDF text (date-first format, inline) ──
+  // Native extraction produces "DD/MM/YYYY TYPE   $ SALARY" in continuous text.
+  // This regex works for both native (inline) and OCR (newline-separated) formats.
+  const nativeRe = /(\d{1,2}\/\d{1,2}\/\d{4})\s+(BAJA|REINGRESO|MODIFICACION DE SALARIO|ALTA)\s+\$\s*([\d.,]+)/g;
+  const nativeMovements: Movement[] = [];
+  let nm: RegExpExecArray | null;
+  while ((nm = nativeRe.exec(text)) !== null) {
+    const fecha = parseDate(nm[1]);
+    if (fecha) {
+      nativeMovements.push({
+        type: nm[2] as Movement["type"],
+        fecha,
+        salario: parseSalary(nm[3]),
+      });
+    }
+  }
+  // If native extraction found movements, use them directly (skip page-based parsing)
+  if (nativeMovements.length > 0) return nativeMovements;
+
+  // ── Strategy 1: OCR text (type-first format, page-based) ──
   const pageChunks = text.split(/--- PAGE \d+ ---/);
   const allMovements: Movement[] = [];
 
@@ -885,13 +955,26 @@ function parseMovements(text: string): Movement[] {
  *
  * If no movements are available, falls back to EmploymentRecord data.
  */
-function deriveSalaryPeriods(movements: Movement[]): SalaryPeriod[] {
+function deriveSalaryPeriods(movements: Movement[], reportDate?: Date): SalaryPeriod[] {
   if (movements.length < 2) return [];
 
   // Movements are in reverse chronological order (newest first).
   // Each row i's period runs from fecha[i] to fecha[i-1].
-  // Only REINGRESO and MODIFICACION rows produce salary periods.
+  // Only REINGRESO/MODIFICACION/ALTA rows produce salary periods.
   const periods: SalaryPeriod[] = [];
+
+  // If the first movement is NOT a BAJA, the person is still employed ("Vigente").
+  // Add a period from the first movement's date to today (since they're still working).
+  if (movements[0].type !== "BAJA") {
+    const endDate = new Date();
+    if (endDate.getTime() > movements[0].fecha.getTime()) {
+      periods.push({
+        fechaInicio: movements[0].fecha,
+        fechaFin: endDate,
+        salarioDiario: movements[0].salario,
+      });
+    }
+  }
 
   for (let i = 1; i < movements.length; i++) {
     const current = movements[i];  // older
@@ -901,7 +984,8 @@ function deriveSalaryPeriods(movements: Movement[]): SalaryPeriod[] {
     if (current.type === "BAJA") continue;
 
     // Period: from this movement's date to the previous (more recent) movement's date
-    if (prev.fecha.getTime() > current.fecha.getTime()) {
+    // Use >= to include same-day periods (e.g., REINGRESO and BAJA on same day = 1 day)
+    if (prev.fecha.getTime() >= current.fecha.getTime()) {
       periods.push({
         fechaInicio: current.fecha,
         fechaFin: prev.fecha,

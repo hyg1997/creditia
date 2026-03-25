@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     // Parse the OCR text
     const parsed = parseOCRText(text);
 
-    if (parsed.records.length === 0) {
+    if (parsed.records.length === 0 && parsed.salaryPeriods.length === 0) {
       return NextResponse.json(
         { error: "No se encontraron registros laborales en el PDF. Verifica que sea una Constancia de Semanas Cotizadas del IMSS." },
         { status: 400 }

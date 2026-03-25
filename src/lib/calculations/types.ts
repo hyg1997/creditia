@@ -8,7 +8,7 @@ export interface EmploymentRecord {
 }
 
 export interface Movement {
-  type: "BAJA" | "REINGRESO" | "MODIFICACION DE SALARIO";
+  type: "BAJA" | "REINGRESO" | "MODIFICACION DE SALARIO" | "ALTA";
   fecha: Date;
   salario: number;
 }

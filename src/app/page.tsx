@@ -172,7 +172,7 @@ export default function Home() {
               saldoRCV={result.afore.saldoRCV}
               promedioSalarial={result.salaryAverage.promedio}
               totalSemanas={result.header.totalSemanasCotizadas}
-              totalRecords={result.records.length}
+              totalRecords={result.records.length || (result.afore.saldoAfore > 0 ? -1 : 0)}
             />
 
             <Separator />
@@ -180,10 +180,13 @@ export default function Home() {
             {/* AFORE breakdown */}
             <AforeBreakdown afore={result.afore} />
 
-            <Separator />
-
-            {/* Employment timeline */}
-            <EmploymentTimeline records={result.records} />
+            {result.records.length > 0 && (
+              <>
+                <Separator />
+                {/* Employment timeline */}
+                <EmploymentTimeline records={result.records} />
+              </>
+            )}
 
             {/* Disclaimers */}
             <div className="text-xs text-muted-foreground space-y-1 border-t pt-4">
