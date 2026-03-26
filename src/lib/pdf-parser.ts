@@ -959,6 +959,8 @@ function deriveSalaryPeriods(movements: Movement[], reportDate?: Date): SalaryPe
   if (movements.length < 2) return [];
 
   // Step 1: Build raw periods from movements (reverse chronological)
+  // Periods use the original movement dates (for AFORE calculation).
+  // The salary-average module applies the -1 day adjustment separately.
   const rawPeriods: SalaryPeriod[] = [];
 
   // If the first movement is NOT a BAJA, the person is still employed ("Vigente").

@@ -11,17 +11,10 @@ function daysBetween(start: Date, end: Date): number {
  * Resolves overlapping salary periods (empalmes).
  * When two periods overlap in time, splits them into sub-periods
  * and sums the salaries during the overlap.
- *
- * Example: Employee works at Company A ($233) from Aug 10-Sep 1
- * and Company B ($227) from Aug 17-Dec 2:
- *   → Aug 10-17: $233 (only A)
- *   → Aug 17-Sep 1: $460 (A + B)
- *   → Sep 1-Dec 2: $227 (only B)
  */
 function resolveOverlaps(periods: SalaryPeriod[]): SalaryPeriod[] {
   if (periods.length <= 1) return periods;
 
-  // Collect all unique time boundaries
   const boundaries = new Set<number>();
   for (const p of periods) {
     boundaries.add(p.fechaInicio.getTime());
@@ -29,7 +22,6 @@ function resolveOverlaps(periods: SalaryPeriod[]): SalaryPeriod[] {
   }
   const sorted = Array.from(boundaries).sort((a, b) => a - b);
 
-  // For each sub-interval, sum salaries of all covering periods
   const result: SalaryPeriod[] = [];
   for (let i = 0; i < sorted.length - 1; i++) {
     const start = sorted[i];
@@ -61,15 +53,15 @@ function resolveOverlaps(periods: SalaryPeriod[]): SalaryPeriod[] {
 /**
  * Calcula el promedio salarial de las últimas 250 semanas cotizadas.
  *
- * 1. Resolve overlapping employment periods (empalmes) by summing salaries
- * 2. Sort periods by date DESC (most recent first)
- * 3. Accumulate weeks until 250, capping the last period if needed
- * 4. Average = SUM(salary × weeks_counted) / 250
+ * Uses original movement dates. The day count is:
+ * - First period (most recent, ends with BAJA): (end - start + 1) days
+ *   because the BAJA date is the last day worked (inclusive).
+ * - All other periods: (end - start) days
+ *   because the end date is the start of the next period (exclusive boundary).
  */
 export function calculateSalaryAverage(
   salaryPeriods: SalaryPeriod[]
 ): SalaryAverageResult {
-  // Resolve overlaps before calculating average
   const resolved = resolveOverlaps(salaryPeriods);
 
   // Sort by fechaInicio DESC (most recent first)
@@ -80,8 +72,11 @@ export function calculateSalaryAverage(
   let accumulatedWeeks = 0;
   const periods: SalaryAverageResult["periods"] = [];
 
-  for (const sp of sorted) {
-    const dias = daysBetween(sp.fechaInicio, sp.fechaFin);
+  for (let i = 0; i < sorted.length; i++) {
+    const sp = sorted[i];
+    // First period: BAJA date is inclusive (+1 day)
+    // Other periods: end date is exclusive (start of next period)
+    const dias = daysBetween(sp.fechaInicio, sp.fechaFin) + (i === 0 ? 1 : 0);
     const semanasTotales = dias / 7;
 
     if (accumulatedWeeks >= WEEKS_TO_AVERAGE) {
