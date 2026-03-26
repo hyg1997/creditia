@@ -8,6 +8,7 @@ import { PdfUpload } from "@/components/pdf-upload";
 import { ResultsSummary } from "@/components/results-summary";
 import { AforeBreakdown } from "@/components/afore-breakdown";
 import { EmploymentTimeline } from "@/components/employment-timeline";
+import { SalaryAverageBreakdown } from "@/components/salary-average-breakdown";
 import { PrintButton } from "@/components/print-button";
 
 interface ApiResult {
@@ -30,6 +31,15 @@ interface ApiResult {
   }[];
   salaryAverage: {
     promedio: number;
+    periods: {
+      fechaAlta: string;
+      fechaBaja: string;
+      salarioDiario: number;
+      dias: number;
+      semanasTotales: number;
+      semanasContadas: number;
+      resultado: number;
+    }[];
   };
   afore: {
     totals: {
@@ -179,6 +189,14 @@ export default function Home() {
 
             {/* AFORE breakdown */}
             <AforeBreakdown afore={result.afore} />
+
+            <Separator />
+
+            {/* Salary average breakdown */}
+            <SalaryAverageBreakdown
+              promedio={result.salaryAverage.promedio}
+              periods={result.salaryAverage.periods}
+            />
 
             {result.records.length > 0 && (
               <>

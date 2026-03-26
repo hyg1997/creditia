@@ -958,17 +958,14 @@ function parseMovements(text: string): Movement[] {
 function deriveSalaryPeriods(movements: Movement[], reportDate?: Date): SalaryPeriod[] {
   if (movements.length < 2) return [];
 
-  // Movements are in reverse chronological order (newest first).
-  // Each row i's period runs from fecha[i] to fecha[i-1].
-  // Only REINGRESO/MODIFICACION/ALTA rows produce salary periods.
-  const periods: SalaryPeriod[] = [];
+  // Step 1: Build raw periods from movements (reverse chronological)
+  const rawPeriods: SalaryPeriod[] = [];
 
   // If the first movement is NOT a BAJA, the person is still employed ("Vigente").
-  // Add a period from the first movement's date to today (since they're still working).
   if (movements[0].type !== "BAJA") {
     const endDate = new Date();
     if (endDate.getTime() > movements[0].fecha.getTime()) {
-      periods.push({
+      rawPeriods.push({
         fechaInicio: movements[0].fecha,
         fechaFin: endDate,
         salarioDiario: movements[0].salario,
@@ -977,16 +974,11 @@ function deriveSalaryPeriods(movements: Movement[], reportDate?: Date): SalaryPe
   }
 
   for (let i = 1; i < movements.length; i++) {
-    const current = movements[i];  // older
-    const prev = movements[i - 1]; // more recent
-
-    // Skip BAJA rows — they're termination markers, not salary periods
+    const current = movements[i];
+    const prev = movements[i - 1];
     if (current.type === "BAJA") continue;
-
-    // Period: from this movement's date to the previous (more recent) movement's date
-    // Use >= to include same-day periods (e.g., REINGRESO and BAJA on same day = 1 day)
     if (prev.fecha.getTime() >= current.fecha.getTime()) {
-      periods.push({
+      rawPeriods.push({
         fechaInicio: current.fecha,
         fechaFin: prev.fecha,
         salarioDiario: current.salario,
@@ -994,5 +986,6 @@ function deriveSalaryPeriods(movements: Movement[], reportDate?: Date): SalaryPe
     }
   }
 
-  return periods;
+  return rawPeriods;
 }
+

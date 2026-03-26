@@ -8,16 +8,72 @@ function daysBetween(start: Date, end: Date): number {
 }
 
 /**
+ * Resolves overlapping salary periods (empalmes).
+ * When two periods overlap in time, splits them into sub-periods
+ * and sums the salaries during the overlap.
+ *
+ * Example: Employee works at Company A ($233) from Aug 10-Sep 1
+ * and Company B ($227) from Aug 17-Dec 2:
+ *   → Aug 10-17: $233 (only A)
+ *   → Aug 17-Sep 1: $460 (A + B)
+ *   → Sep 1-Dec 2: $227 (only B)
+ */
+function resolveOverlaps(periods: SalaryPeriod[]): SalaryPeriod[] {
+  if (periods.length <= 1) return periods;
+
+  // Collect all unique time boundaries
+  const boundaries = new Set<number>();
+  for (const p of periods) {
+    boundaries.add(p.fechaInicio.getTime());
+    boundaries.add(p.fechaFin.getTime());
+  }
+  const sorted = Array.from(boundaries).sort((a, b) => a - b);
+
+  // For each sub-interval, sum salaries of all covering periods
+  const result: SalaryPeriod[] = [];
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const start = sorted[i];
+    const end = sorted[i + 1];
+
+    let totalSalary = 0;
+    let hasActive = false;
+    for (const p of periods) {
+      const pStart = p.fechaInicio.getTime();
+      const pEnd = p.fechaFin.getTime();
+      if (pStart <= start && pEnd >= end) {
+        totalSalary += p.salarioDiario;
+        hasActive = true;
+      }
+    }
+
+    if (hasActive) {
+      result.push({
+        fechaInicio: new Date(start),
+        fechaFin: new Date(end),
+        salarioDiario: totalSalary,
+      });
+    }
+  }
+
+  return result;
+}
+
+/**
  * Calcula el promedio salarial de las últimas 250 semanas cotizadas.
  *
- * Usa los periodos salariales derivados de los movimientos, lo cual
- * permite considerar cambios de salario por MODIFICACION DE SALARIO.
+ * 1. Resolve overlapping employment periods (empalmes) by summing salaries
+ * 2. Sort periods by date DESC (most recent first)
+ * 3. Accumulate weeks until 250, capping the last period if needed
+ * 4. Average = SUM(salary × weeks_counted) / 250
  */
 export function calculateSalaryAverage(
   salaryPeriods: SalaryPeriod[]
 ): SalaryAverageResult {
+  // Resolve overlaps before calculating average
+  const resolved = resolveOverlaps(salaryPeriods);
+
   // Sort by fechaInicio DESC (most recent first)
-  const sorted = [...salaryPeriods].sort(
+  const sorted = [...resolved].sort(
     (a, b) => b.fechaInicio.getTime() - a.fechaInicio.getTime()
   );
 
