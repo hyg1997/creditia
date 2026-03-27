@@ -1003,14 +1003,14 @@ function deriveSalaryPeriods(movements: Movement[], reportDate?: Date): SalaryPe
   // The salary-average module applies the -1 day adjustment separately.
   const rawPeriods: SalaryPeriod[] = [];
 
-  // If the first movement is NOT a BAJA, the person is still employed ("Vigente").
+  // Handle "Vigente" — first movement not being BAJA means active employment
+  const now = new Date();
+  const todayUtc = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
   if (movements[0].type !== "BAJA") {
-    const now = new Date();
-    const endDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-    if (endDate.getTime() > movements[0].fecha.getTime()) {
+    if (todayUtc.getTime() > movements[0].fecha.getTime()) {
       rawPeriods.push({
         fechaInicio: movements[0].fecha,
-        fechaFin: endDate,
+        fechaFin: todayUtc,
         salarioDiario: movements[0].salario,
       });
     }
@@ -1020,12 +1020,42 @@ function deriveSalaryPeriods(movements: Movement[], reportDate?: Date): SalaryPe
     const current = movements[i];
     const prev = movements[i - 1];
     if (current.type === "BAJA") continue;
+
     if (prev.fecha.getTime() >= current.fecha.getTime()) {
+      // Normal case: period from current to previous movement
+      const isFirstBaja = i === 1 && movements[0].type === "BAJA";
       rawPeriods.push({
         fechaInicio: current.fecha,
         fechaFin: prev.fecha,
         salarioDiario: current.salario,
       });
+    } else {
+      // prev.fecha < current.fecha — this movement belongs to a DIFFERENT
+      // simultaneous employment. Its period extends to today (if vigente)
+      // or to the most recent BAJA that comes before it in the list.
+      // Find the end: look backwards for the nearest date >= current.fecha
+      let periodEnd: Date | null = null;
+      for (let k = i - 1; k >= 0; k--) {
+        if (movements[k].fecha.getTime() >= current.fecha.getTime()) {
+          periodEnd = movements[k].fecha;
+          break;
+        }
+      }
+      if (!periodEnd && todayUtc.getTime() > current.fecha.getTime()) {
+        periodEnd = todayUtc;
+      }
+      // If periodEnd equals current fecha, this is a same-day vigente
+      // from a different employer — extend to today
+      if (periodEnd && periodEnd.getTime() === current.fecha.getTime()) {
+        periodEnd = todayUtc;
+      }
+      if (periodEnd && periodEnd.getTime() >= current.fecha.getTime()) {
+        rawPeriods.push({
+          fechaInicio: current.fecha,
+          fechaFin: periodEnd,
+          salarioDiario: current.salario,
+        });
+      }
     }
   }
 

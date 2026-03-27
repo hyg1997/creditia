@@ -24,7 +24,11 @@ function resolveOverlaps(periods: SalaryPeriod[]): SalaryPeriod[] {
       const a = periods[i], b = periods[j];
       const aStart = a.fechaInicio.getTime(), aEnd = a.fechaFin.getTime();
       const bStart = b.fechaInicio.getTime(), bEnd = b.fechaFin.getTime();
-      if (aStart < bEnd && bStart < aEnd && aEnd !== bStart && bEnd !== aStart) {
+      // Two periods overlap if they share interior time OR start on the same date
+      const sharesInterior = aStart < bEnd && bStart < aEnd;
+      const sameStart = aStart === bStart;
+      const justTouching = (aEnd === bStart || bEnd === aStart) && !sameStart;
+      if ((sharesInterior || sameStart) && !justTouching) {
         involvedInOverlap.add(i);
         involvedInOverlap.add(j);
       }
