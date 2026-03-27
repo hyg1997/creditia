@@ -306,6 +306,46 @@ function extractPatron(section: string): string {
  * in a completely different section of the OCR text.
  */
 function parseRecords(text: string): EmploymentRecord[] {
+  // ── Strategy 0: Native PDF inline format ──
+  // Pattern: "FECHA_BAJA ESTADO ... Fecha de alta   Fecha de baja FECHA_ALTA Entidad federativa $ SALARIO
+  //           Nombre del patrón   NOMBRE Registro Patronal   REGPAT"
+  const nativeRecordRe = /Fecha de alta\s+Fecha de baja\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+Entidad federativa\s+\$\s*([\d.,]+)\s*Nombre del patr[oó]n\s+(.*?)\s*Registro Patronal\s+(\w+)/g;
+  const nativeRecords: EmploymentRecord[] = [];
+  let nrm: RegExpExecArray | null;
+
+  // Also collect baja dates that appear before "ESTADO Salario Base"
+  const bajaDateRe = /(\d{1,2}\/\d{1,2}\/\d{4})\s+(?:[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ ]+?)?\s*Salario Base de Cotizaci[oó]n/g;
+  const bajaDates: Date[] = [];
+  let bdm: RegExpExecArray | null;
+  while ((bdm = bajaDateRe.exec(text)) !== null) {
+    const d = parseDate(bdm[1]);
+    if (d) bajaDates.push(d);
+  }
+
+  let bajaIdx = 0;
+  while ((nrm = nativeRecordRe.exec(text)) !== null) {
+    const fechaAlta = parseDate(nrm[1]);
+    if (!fechaAlta) continue;
+    const salario = parseSalary(nrm[2]);
+    const patron = nrm[3].trim();
+    const registroPatronal = nrm[4].trim();
+
+    // Match with the corresponding baja date (they appear in the same order)
+    const fechaBaja = bajaDates[bajaIdx] || fechaAlta;
+    bajaIdx++;
+
+    nativeRecords.push({
+      patron,
+      registroPatronal,
+      entidadFederativa: "",
+      fechaAlta,
+      fechaBaja,
+      salarioBaseCotizacion: salario,
+    });
+  }
+
+  if (nativeRecords.length > 0) return nativeRecords;
+
   // ══════════════════════════════════════════════════════════════════
   // Phase 1: Pre-extract global evidence from the full OCR text
   // ══════════════════════════════════════════════════════════════════

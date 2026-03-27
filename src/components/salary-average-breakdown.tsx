@@ -39,7 +39,6 @@ export function SalaryAverageBreakdown({
   const totalSemanas = periods.reduce((s, p) => s + p.semanasTotales, 0);
   const totalContadas = periods.reduce((s, p) => s + p.semanasContadas, 0);
   const totalResultado = periods.reduce((s, p) => s + p.resultado, 0);
-  const activePeriods = periods.filter((p) => p.semanasContadas > 0);
 
   return (
     <Card>
@@ -77,32 +76,42 @@ export function SalaryAverageBreakdown({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {activePeriods.map((period, index) => (
-                <TableRow
-                  key={index}
-                  className={period.semanasContadas < period.semanasTotales ? "bg-amber-50 dark:bg-amber-950/20" : ""}
-                >
-                  <TableCell className="text-muted-foreground">{index + 1}</TableCell>
-                  <TableCell className="whitespace-nowrap text-sm">
-                    {formatDate(period.fechaAlta)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-sm">
-                    {formatDate(period.fechaBaja)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono">
-                    {formatMXN(period.salarioDiario)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono">
-                    {formatNumber(period.semanasTotales, 2)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono">
-                    {formatNumber(period.semanasContadas, 2)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono font-semibold">
-                    {formatMXN(period.resultado)}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {periods.map((period, index) => {
+                const isActive = period.semanasContadas > 0;
+                const isCapped = isActive && period.semanasContadas < period.semanasTotales;
+                return (
+                  <TableRow
+                    key={index}
+                    className={
+                      isCapped
+                        ? "bg-amber-50 dark:bg-amber-950/20"
+                        : !isActive
+                          ? "text-muted-foreground"
+                          : ""
+                    }
+                  >
+                    <TableCell>{index + 1}</TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">
+                      {formatDate(period.fechaAlta)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">
+                      {formatDate(period.fechaBaja)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {formatMXN(period.salarioDiario)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {formatNumber(period.semanasTotales, 2)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {formatNumber(period.semanasContadas, 2)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono font-semibold">
+                      {formatMXN(period.resultado)}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
             <TableFooter>
               <TableRow>

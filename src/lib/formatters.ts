@@ -17,7 +17,11 @@ const dateFormatter = new Intl.DateTimeFormat("es-MX", {
 
 export function formatDate(date: Date | string): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return dateFormatter.format(d);
+  // Use UTC to avoid timezone offset shifting the date by 1 day
+  const day = d.getUTCDate().toString().padStart(2, "0");
+  const month = (d.getUTCMonth() + 1).toString().padStart(2, "0");
+  const year = d.getUTCFullYear();
+  return `${day}/${month}/${year}`;
 }
 
 export function formatNumber(n: number, decimals = 2): string {
