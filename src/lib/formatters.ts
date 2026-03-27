@@ -16,12 +16,18 @@ const dateFormatter = new Intl.DateTimeFormat("es-MX", {
 });
 
 export function formatDate(date: Date | string): string {
-  const d = typeof date === "string" ? new Date(date) : date;
-  // Use UTC to avoid timezone offset shifting the date by 1 day
-  const day = d.getUTCDate().toString().padStart(2, "0");
-  const month = (d.getUTCMonth() + 1).toString().padStart(2, "0");
-  const year = d.getUTCFullYear();
-  return `${day}/${month}/${year}`;
+  if (typeof date === "string") {
+    // If already formatted as DD/MM/YYYY, return as-is
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(date)) return date;
+    // ISO string — parse and format
+    const d = new Date(date);
+    const day = d.getUTCDate().toString().padStart(2, "0");
+    const month = (d.getUTCMonth() + 1).toString().padStart(2, "0");
+    return `${day}/${month}/${d.getUTCFullYear()}`;
+  }
+  const day = date.getDate().toString().padStart(2, "0");
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  return `${day}/${month}/${date.getFullYear()}`;
 }
 
 export function formatNumber(n: number, decimals = 2): string {

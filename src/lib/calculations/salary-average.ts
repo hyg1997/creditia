@@ -15,24 +15,32 @@ function daysBetween(start: Date, end: Date): number {
 function resolveOverlaps(periods: SalaryPeriod[]): SalaryPeriod[] {
   if (periods.length <= 1) return periods;
 
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  // Use exclusive-end boundaries to properly split overlapping periods.
+  // Each period [start, end] becomes [start, end+1day) in boundary math.
+  // This ensures: [A.start, B.start-1] [B.start, B.end] [B.end+1, A.end]
   const boundaries = new Set<number>();
   for (const p of periods) {
     boundaries.add(p.fechaInicio.getTime());
-    boundaries.add(p.fechaFin.getTime());
+    boundaries.add(p.fechaFin.getTime() + DAY_MS);
   }
-  const sorted = Array.from(boundaries).sort((a, b) => a - b);
+  const sortedBounds = Array.from(boundaries).sort((a, b) => a - b);
 
   const result: SalaryPeriod[] = [];
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const start = sorted[i];
-    const end = sorted[i + 1];
+  for (let i = 0; i < sortedBounds.length - 1; i++) {
+    const start = sortedBounds[i];
+    const endExcl = sortedBounds[i + 1];
+    const endIncl = endExcl - DAY_MS;
+
+    if (endIncl < start) continue;
 
     let totalSalary = 0;
     let hasActive = false;
     for (const p of periods) {
       const pStart = p.fechaInicio.getTime();
-      const pEnd = p.fechaFin.getTime();
-      if (pStart <= start && pEnd >= end) {
+      const pEndIncl = p.fechaFin.getTime();
+      if (pStart <= start && pEndIncl >= endIncl) {
         totalSalary += p.salarioDiario;
         hasActive = true;
       }
@@ -41,7 +49,7 @@ function resolveOverlaps(periods: SalaryPeriod[]): SalaryPeriod[] {
     if (hasActive) {
       result.push({
         fechaInicio: new Date(start),
-        fechaFin: new Date(end),
+        fechaFin: new Date(endIncl),
         salarioDiario: totalSalary,
       });
     }

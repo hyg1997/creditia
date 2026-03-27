@@ -35,19 +35,26 @@ export async function POST(request: NextRequest) {
     const result = calculateAll(parsed);
 
     // Serialize dates for JSON response
+    // Serialize dates as DD/MM/YYYY strings to avoid timezone issues
+    const fmtDate = (d: Date) => {
+      const day = d.getDate().toString().padStart(2, "0");
+      const month = (d.getMonth() + 1).toString().padStart(2, "0");
+      return `${day}/${month}/${d.getFullYear()}`;
+    };
+
     const serialized = {
       header: result.header,
       records: result.records.map((r) => ({
         ...r,
-        fechaAlta: r.fechaAlta.toISOString(),
-        fechaBaja: r.fechaBaja.toISOString(),
+        fechaAlta: fmtDate(r.fechaAlta),
+        fechaBaja: fmtDate(r.fechaBaja),
       })),
       salaryAverage: {
         promedio: result.salaryAverage.promedio,
         periods: result.salaryAverage.periods.map((p) => ({
           ...p,
-          fechaAlta: p.fechaAlta.toISOString(),
-          fechaBaja: p.fechaBaja.toISOString(),
+          fechaAlta: fmtDate(p.fechaAlta),
+          fechaBaja: fmtDate(p.fechaBaja),
         })),
       },
       afore: result.afore,
