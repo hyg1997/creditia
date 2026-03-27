@@ -40,12 +40,12 @@ function extractReportDate(text: string): Date | undefined {
   // Native: "Fecha de emisión del reporte 13   /   01   /   2026"
   const native = text.match(/Fecha de emisi[oó]n del reporte\s+(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{4})/i);
   if (native) {
-    return new Date(parseInt(native[3]), parseInt(native[2]) - 1, parseInt(native[1]));
+    return new Date(Date.UTC(parseInt(native[3]), parseInt(native[2]) - 1, parseInt(native[1])));
   }
   // OCR: "Fecha de emisi6n del reporte\n\n27 / 01 / 2026"
   const ocr = text.match(/Fecha de emisi[oó6]n del reporte\s+(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{4})/i);
   if (ocr) {
-    return new Date(parseInt(ocr[3]), parseInt(ocr[2]) - 1, parseInt(ocr[1]));
+    return new Date(Date.UTC(parseInt(ocr[3]), parseInt(ocr[2]) - 1, parseInt(ocr[1])));
   }
   return undefined;
 }
@@ -231,7 +231,7 @@ function parseDate(dateStr: string): Date | null {
     const month = parseInt(parts[1], 10) - 1;
     const year = parseInt(parts[2], 10);
     if (year > 1900 && year < 2100 && month >= 0 && month < 12 && day > 0 && day <= 31) {
-      return new Date(year, month, day);
+      return new Date(Date.UTC(year, month, day));
     }
   }
   return null;
@@ -1005,7 +1005,8 @@ function deriveSalaryPeriods(movements: Movement[], reportDate?: Date): SalaryPe
 
   // If the first movement is NOT a BAJA, the person is still employed ("Vigente").
   if (movements[0].type !== "BAJA") {
-    const endDate = new Date();
+    const now = new Date();
+    const endDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
     if (endDate.getTime() > movements[0].fecha.getTime()) {
       rawPeriods.push({
         fechaInicio: movements[0].fecha,

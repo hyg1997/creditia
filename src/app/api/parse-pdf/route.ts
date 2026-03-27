@@ -37,9 +37,9 @@ export async function POST(request: NextRequest) {
     // Serialize dates for JSON response
     // Serialize dates as DD/MM/YYYY strings to avoid timezone issues
     const fmtDate = (d: Date) => {
-      const day = d.getDate().toString().padStart(2, "0");
-      const month = (d.getMonth() + 1).toString().padStart(2, "0");
-      return `${day}/${month}/${d.getFullYear()}`;
+      const day = d.getUTCDate().toString().padStart(2, "0");
+      const month = (d.getUTCMonth() + 1).toString().padStart(2, "0");
+      return `${day}/${month}/${d.getUTCFullYear()}`;
     };
 
     const serialized = {
