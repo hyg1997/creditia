@@ -17,17 +17,43 @@ function resolveOverlaps(periods: SalaryPeriod[]): SalaryPeriod[] {
 
   const DAY_MS = 24 * 60 * 60 * 1000;
 
-  // Use exclusive-end boundaries to properly split overlapping periods.
-  // Each period [start, end] becomes [start, end+1day) in boundary math.
-  // This ensures: [A.start, B.start-1] [B.start, B.end] [B.end+1, A.end]
+  // Identify which periods are involved in true overlaps (A.end > B.start, strictly)
+  const involvedInOverlap = new Set<number>();
+  for (let i = 0; i < periods.length; i++) {
+    for (let j = i + 1; j < periods.length; j++) {
+      const a = periods[i], b = periods[j];
+      const aStart = a.fechaInicio.getTime(), aEnd = a.fechaFin.getTime();
+      const bStart = b.fechaInicio.getTime(), bEnd = b.fechaFin.getTime();
+      if (aStart < bEnd && bStart < aEnd && aEnd !== bStart && bEnd !== aStart) {
+        involvedInOverlap.add(i);
+        involvedInOverlap.add(j);
+      }
+    }
+  }
+
+  // If no overlaps, return as-is
+  if (involvedInOverlap.size === 0) return periods;
+
+  // Separate overlapping periods from clean ones
+  const overlapping: SalaryPeriod[] = [];
+  const clean: SalaryPeriod[] = [];
+  for (let i = 0; i < periods.length; i++) {
+    if (involvedInOverlap.has(i)) {
+      overlapping.push(periods[i]);
+    } else {
+      clean.push(periods[i]);
+    }
+  }
+
+  // Resolve only the overlapping periods using exclusive-end boundary math
   const boundaries = new Set<number>();
-  for (const p of periods) {
+  for (const p of overlapping) {
     boundaries.add(p.fechaInicio.getTime());
     boundaries.add(p.fechaFin.getTime() + DAY_MS);
   }
   const sortedBounds = Array.from(boundaries).sort((a, b) => a - b);
 
-  const result: SalaryPeriod[] = [];
+  const resolved: SalaryPeriod[] = [];
   for (let i = 0; i < sortedBounds.length - 1; i++) {
     const start = sortedBounds[i];
     const endExcl = sortedBounds[i + 1];
@@ -37,7 +63,7 @@ function resolveOverlaps(periods: SalaryPeriod[]): SalaryPeriod[] {
 
     let totalSalary = 0;
     let hasActive = false;
-    for (const p of periods) {
+    for (const p of overlapping) {
       const pStart = p.fechaInicio.getTime();
       const pEndIncl = p.fechaFin.getTime();
       if (pStart <= start && pEndIncl >= endIncl) {
@@ -47,7 +73,7 @@ function resolveOverlaps(periods: SalaryPeriod[]): SalaryPeriod[] {
     }
 
     if (hasActive) {
-      result.push({
+      resolved.push({
         fechaInicio: new Date(start),
         fechaFin: new Date(endIncl),
         salarioDiario: totalSalary,
@@ -55,7 +81,7 @@ function resolveOverlaps(periods: SalaryPeriod[]): SalaryPeriod[] {
     }
   }
 
-  return result;
+  return [...clean, ...resolved];
 }
 
 /**
