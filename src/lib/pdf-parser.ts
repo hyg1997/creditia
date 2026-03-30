@@ -307,44 +307,86 @@ function extractPatron(section: string): string {
  */
 function parseRecords(text: string): EmploymentRecord[] {
   // ── Strategy 0: Native PDF inline format ──
-  // Pattern: "FECHA_BAJA ESTADO ... Fecha de alta   Fecha de baja FECHA_ALTA Entidad federativa $ SALARIO
-  //           Nombre del patrón   NOMBRE Registro Patronal   REGPAT"
-  const nativeRecordRe = /Fecha de alta\s+Fecha de baja\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+Entidad federativa\s+\$\s*([\d.,]+)\s*Nombre del patr[oó]n\s+(.*?)\s*Registro Patronal\s+(\w+)/g;
+  // Native PDFs produce concatenated text with no spaces between labels and values:
+  //   "[BAJA_DATE]\n[ENTIDAD]\nSalario Base de Cotización *Fecha de altaFecha de baja[ALTA_DATE]\n
+  //    Entidad federativa\n$ SALARY\nNombre del patrón[PATRON]\nRegistro Patronal[REG]"
+  // The first record may show "Vigente" instead of a baja date.
+  // Baja dates appear BEFORE each record's "Salario Base" block.
+
+  // Step 1: Find all record blocks with their positions and alta dates
+  const nativeRecordRe = /Fecha de alta\s*Fecha de baja\s*(\d{1,2}\/\d{1,2}\/\d{4})\s+Entidad federativa\s+\$\s*([\d.,]+)\s*Nombre del patr[oó]n\s*([\s\S]*?)\s*Registro Patronal\s*(\w+)/g;
   const nativeRecords: EmploymentRecord[] = [];
-  let nrm: RegExpExecArray | null;
-
-  // Also collect baja dates that appear before "ESTADO Salario Base"
-  const bajaDateRe = /(\d{1,2}\/\d{1,2}\/\d{4})\s+(?:[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ ]+?)?\s*Salario Base de Cotizaci[oó]n/g;
-  const bajaDates: Date[] = [];
-  let bdm: RegExpExecArray | null;
-  while ((bdm = bajaDateRe.exec(text)) !== null) {
-    const d = parseDate(bdm[1]);
-    if (d) bajaDates.push(d);
+  interface NativeMatch {
+    altaDate: Date;
+    salary: number;
+    patron: string;
+    regPat: string;
+    pos: number;
   }
-
-  let bajaIdx = 0;
+  const matches: NativeMatch[] = [];
+  let nrm: RegExpExecArray | null;
   while ((nrm = nativeRecordRe.exec(text)) !== null) {
-    const fechaAlta = parseDate(nrm[1]);
-    if (!fechaAlta) continue;
-    const salario = parseSalary(nrm[2]);
-    const patron = nrm[3].trim();
-    const registroPatronal = nrm[4].trim();
-
-    // Match with the corresponding baja date (they appear in the same order)
-    const fechaBaja = bajaDates[bajaIdx] || fechaAlta;
-    bajaIdx++;
-
-    nativeRecords.push({
-      patron,
-      registroPatronal,
-      entidadFederativa: "",
-      fechaAlta,
-      fechaBaja,
-      salarioBaseCotizacion: salario,
+    const d = parseDate(nrm[1]);
+    if (!d) continue;
+    matches.push({
+      altaDate: d,
+      salary: parseSalary(nrm[2]),
+      patron: nrm[3].replace(/\n/g, " ").trim(),
+      regPat: nrm[4].trim(),
+      pos: nrm.index,
     });
   }
 
-  if (nativeRecords.length > 0) return nativeRecords;
+  if (matches.length > 0) {
+    // Step 2: For each record, find the baja date by looking at text before the match
+    const reportDate = extractReportDate(text);
+    const now = new Date();
+    const todayUtc = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+
+    for (const m of matches) {
+      // Look at the ~200 chars before this match for the baja date or "Vigente"
+      const preText = text.substring(Math.max(0, m.pos - 200), m.pos);
+
+      let fechaBaja: Date | null = null;
+
+      // Check if this is a "Vigente" (active employment)
+      if (/Vigente/i.test(preText)) {
+        // Use today's date for Vigente (active employment extends to present)
+        fechaBaja = todayUtc;
+      } else {
+        // Look for a date in the pre-text (baja date appears before "Salario Base")
+        // Pattern: "DD/MM/YYYY\nENTIDAD\nSalario Base..."
+        const bajaMatch = preText.match(/(\d{1,2}\/\d{1,2}\/\d{4})\s+(?:[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ ]*\s+)?Salario Base/);
+        if (bajaMatch) {
+          fechaBaja = parseDate(bajaMatch[1]);
+        }
+        // Fallback: just find the last date in pre-text that's NOT the alta date
+        if (!fechaBaja) {
+          const allDates = [...preText.matchAll(/(\d{1,2}\/\d{1,2}\/\d{4})/g)];
+          for (let i = allDates.length - 1; i >= 0; i--) {
+            const d = parseDate(allDates[i][1]);
+            if (d && d.getTime() !== m.altaDate.getTime()) {
+              fechaBaja = d;
+              break;
+            }
+          }
+        }
+      }
+
+      if (!fechaBaja) fechaBaja = m.altaDate;
+
+      nativeRecords.push({
+        patron: m.patron,
+        registroPatronal: m.regPat,
+        entidadFederativa: "",
+        fechaAlta: m.altaDate,
+        fechaBaja,
+        salarioBaseCotizacion: m.salary,
+      });
+    }
+
+    return nativeRecords;
+  }
 
   // ══════════════════════════════════════════════════════════════════
   // Phase 1: Pre-extract global evidence from the full OCR text
@@ -840,7 +882,7 @@ function parseMovements(text: string): Movement[] {
   // ── Strategy 0: Native PDF text (date-first format, inline) ──
   // Native extraction produces "DD/MM/YYYY TYPE   $ SALARY" in continuous text.
   // This regex works for both native (inline) and OCR (newline-separated) formats.
-  const nativeRe = /(\d{1,2}\/\d{1,2}\/\d{4})\s+(BAJA|REINGRESO|MODIFICACION DE SALARIO|ALTA)\s+\$\s*([\d.,]+)/g;
+  const nativeRe = /(\d{1,2}\/\d{1,2}\/\d{4})\s*(BAJA|REINGRESO|MODIFICACION DE SALARIO|ALTA)\s*\$\s*([\d.,]+)/g;
   const nativeMovements: Movement[] = [];
   let nm: RegExpExecArray | null;
   while ((nm = nativeRe.exec(text)) !== null) {
@@ -898,13 +940,14 @@ function parseMovements(text: string): Movement[] {
     const rightData: { idx: number; date: string; salary: string | null }[] = [];
     const salaryPool: { idx: number; salary: string }[] = [];
     let skipNextStandalone = 0;
+    let skipNextSalary = 0;
 
     for (let idx = 0; idx < pgLines.length; idx++) {
       if (inlineUsed.has(idx)) continue;
       const t = pgLines[idx].trim();
 
-      // "Fecha de alta" alone → skip next standalone (for the alta date value)
-      if (/^Fecha de alta\s*$/.test(t)) {
+      // "Fecha de alta" or "Fecha de baja" alone → skip next standalone date value
+      if (/^Fecha de (alta|baja)\s*$/.test(t)) {
         skipNextStandalone++;
         continue;
       }
@@ -918,7 +961,14 @@ function parseMovements(text: string): Movement[] {
       if (NOISE_RE.test(t)) continue;
       if (!t) continue;
       if (/^(BAJA|REINGRESO|MODIFICACION DE SALARIO)$/.test(t)) continue;
-      if (/Salario Base de Cotizaci[oóéeëi]\w*\s*\*\s*\$/i.test(t)) continue;
+      // "Salario Base de Cotización */$" — record header, skip + skip next $ line
+      // But NOT "/* Valor del último salario base de cotización..." (informational text)
+      if (/Salario Base de Cotizaci[oóéeëi]/i.test(t)) {
+        const isRecordHeader = /^Salario Base de Cotizaci/i.test(t);
+        // Only skip next $ for actual record headers, not informational "/* Valor..." lines
+        if (isRecordHeader && !/\$\s*[\d.,]+/.test(t)) skipNextSalary++;
+        continue;
+      }
       if (t === "Salario Base" || t === "Fecha de movimiento") continue;
       if (/Fecha de movimiento/.test(t) && /Salario/.test(t)) continue;
       // All-caps text > 5 chars (patron names)
@@ -944,7 +994,10 @@ function parseMovements(text: string): Movement[] {
 
       // "$ NNN.NN"
       const mS = t.match(/^\$\s*([\d.,]+)$/);
-      if (mS) { salaryPool.push({ idx, salary: mS[1] }); continue; }
+      if (mS) {
+        if (skipNextSalary > 0) { skipNextSalary--; continue; }
+        salaryPool.push({ idx, salary: mS[1] }); continue;
+      }
 
       // Bare number (e.g., "8.45")
       const mN = t.match(/^(\d+\.\d+)$/);

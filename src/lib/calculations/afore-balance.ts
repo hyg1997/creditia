@@ -32,7 +32,7 @@ function daysBetween(start: Date, end: Date): number {
  */
 export function calculateAfore(salaryPeriods: SalaryPeriod[]): AforeResult {
   const periods: PeriodAfore[] = salaryPeriods.map((sp) => {
-    const year = sp.fechaInicio.getFullYear();
+    const year = sp.fechaInicio.getUTCFullYear();
     const dias = daysBetween(sp.fechaInicio, sp.fechaFin);
     const totalSalario = dias * sp.salarioDiario;
     const yearsElapsed = CURRENT_YEAR - year;
