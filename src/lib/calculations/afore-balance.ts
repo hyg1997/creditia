@@ -52,11 +52,11 @@ function expandPeriods(periods: SalaryPeriod[]): SalaryPeriod[] {
 }
 
 const RENDIMIENTO_NETO_ANUAL: Record<number, number> = {
-  1992: 0.08,
+  1992: 0.14,
   1993: 0.09,
-  1994: 0.04,
-  1995: 0.18,
-  1996: 0.16,
+  1994: 0.28,
+  1995: 0.43,
+  1996: 0.24,
   1997: 0.16,
   1998: 0.20,
   1999: 0.18,
@@ -94,6 +94,38 @@ function getRate(year: number): number {
   return RENDIMIENTO_NETO_ANUAL[year] ?? FALLBACK_RATE;
 }
 
+// Rendimientos INFONAVIT (subcuenta de vivienda) — tasas nominales anuales.
+// Pre-1997: vivienda SAR administrada por INFONAVIT, rendimientos ~INPC (inflación).
+// 1997-2003: transición, rendimiento cercano al aumento del salario mínimo.
+// 2004+: INFONAVIT publica rendimiento propio (fuente: Informes Anuales INFONAVIT).
+// Tasas confirmadas marcadas; las demás son estimaciones basadas en aumentos de SM e INPC.
+const RENDIMIENTO_INFONAVIT: Record<number, number> = {
+  1992: 0.08, 1993: 0.07, 1994: 0.06, 1995: 0.35, 1996: 0.22,
+  1997: 0.14,  1998: 0.12,  1999: 0.10,  2000: 0.08,
+  2001: 0.065, 2002: 0.045, 2003: 0.036,
+  2004: 0.0835, // confirmado
+  2005: 0.035, 2006: 0.040, 2007: 0.039, 2008: 0.040,
+  2009: 0.045, 2010: 0.050, 2011: 0.042,
+  2012: 0.056, // INFONAVIT empezó a agregar +1.5% sobre SM
+  2013: 0.063, 2014: 0.0651, 2015: 0.066,
+  2016: 0.0681, // confirmado
+  2017: 0.0832, // confirmado
+  2018: 0.0638, // confirmado
+  2019: 0.0732, // confirmado
+  2020: 0.0533, // confirmado
+  2021: 0.0736, // confirmado
+  2022: 0.0782, // confirmado
+  2023: 0.0633, // confirmado
+  2024: 0.0698, // confirmado
+  2025: 0.0500, // confirmado
+};
+
+const FALLBACK_INFONAVIT_RATE = 0.05;
+
+function getInfonavitRate(year: number): number {
+  return RENDIMIENTO_INFONAVIT[year] ?? FALLBACK_INFONAVIT_RATE;
+}
+
 const SAR_RATE = 0.02;
 const VIVIENDA_RATE = 0.05;
 const CEAV_TRABAJADOR_RATE = 0.01125;
@@ -104,8 +136,14 @@ function topeSBC(salarioDiario: number, year: number): number {
   return Math.min(salarioDiario, TOPE_UMA * getUMA(year));
 }
 
-// Cuota Social diaria por rango de SBC en UMAs (Ley del Seguro Social Art. 168 Fracc. IV)
-// Valores en pesos diarios por UMA para 2024 (se actualizan con UMA anual)
+// Salario Mínimo General del D.F. / CDMX (fuente: CONASAMI)
+// Usado para cuota social pre-2009: 5.5% del SMGDF por día cotizado
+const SMGDF_POR_AÑO: Record<number, number> = {
+  1997: 26.45, 1998: 30.20, 1999: 34.45, 2000: 37.90,
+  2001: 40.35, 2002: 42.15, 2003: 43.65, 2004: 45.24,
+  2005: 46.80, 2006: 48.67, 2007: 50.57, 2008: 52.59,
+};
+
 const UMA_DIARIO_POR_AÑO: Record<number, number> = {
   2017: 75.49,
   2018: 80.60,
@@ -125,9 +163,16 @@ function getUMA(year: number): number {
   return UMA_DIARIO_POR_AÑO[2026] ?? 117.65;
 }
 
-// Cuota social: porcentaje del SBC según rango en UMAs
+// Pre-2009: cuota social = 5.5% del SMGDF (monto fijo, igual para todos)
+// Post-2009: porcentaje del SBC según rango en UMAs (Art. 168 Fracc. IV LSS)
 function calcCuotaSocialDiaria(salarioDiario: number, year: number): number {
-  if (year < 2009) return 0;
+  if (year < 1997) return 0;
+
+  if (year < 2009) {
+    const smgdf = SMGDF_POR_AÑO[year];
+    if (!smgdf) return 0;
+    return smgdf * 0.055;
+  }
 
   const uma = getUMA(year);
   const umas = salarioDiario / uma;
@@ -150,6 +195,15 @@ function compoundRendimiento(aportacion: number, fromYear: number, toYear: numbe
   let factor = 1;
   for (let y = fromYear; y < toYear; y++) {
     factor *= 1 + getRate(y);
+  }
+  return aportacion * (factor - 1);
+}
+
+function compoundRendimientoVivienda(aportacion: number, fromYear: number, toYear: number): number {
+  if (aportacion <= 0 || fromYear >= toYear) return 0;
+  let factor = 1;
+  for (let y = fromYear; y < toYear; y++) {
+    factor *= 1 + getInfonavitRate(y);
   }
   return aportacion * (factor - 1);
 }
@@ -198,10 +252,10 @@ export function calculateAfore(salaryPeriods: SalaryPeriod[]): AforeResult {
 
   for (const p of periods) {
     sar92.aportaciones += p.sar92;
-    sar92.rendimientos += p.year > 1996 ? compoundRendimiento(p.sar92, p.year, currentYear) : 0;
+    sar92.rendimientos += compoundRendimiento(p.sar92, p.year, currentYear);
 
     vivienda92.aportaciones += p.vivienda92;
-    vivienda92.rendimientos += compoundRendimiento(p.vivienda92, p.year, currentYear);
+    vivienda92.rendimientos += compoundRendimientoVivienda(p.vivienda92, p.year, currentYear);
 
     retiro.aportaciones += p.retiro;
     retiro.rendimientos += compoundRendimiento(p.retiro, p.year, currentYear);
@@ -216,7 +270,7 @@ export function calculateAfore(salaryPeriods: SalaryPeriod[]): AforeResult {
     cuotaSocial.rendimientos += compoundRendimiento(p.cuotaSocial, p.year, currentYear);
 
     vivienda97.aportaciones += p.vivienda97;
-    vivienda97.rendimientos += compoundRendimiento(p.vivienda97, p.year, currentYear);
+    vivienda97.rendimientos += compoundRendimientoVivienda(p.vivienda97, p.year, currentYear);
   }
 
   for (const s of [sar92, vivienda92, retiro, ceavTrabajador, ceavPatron, cuotaSocial, vivienda97]) {
