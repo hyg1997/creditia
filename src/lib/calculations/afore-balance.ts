@@ -212,7 +212,11 @@ function emptySubcuenta(): SubcuentaTotal {
   return { aportaciones: 0, rendimientos: 0, total: 0 };
 }
 
-export function calculateAfore(salaryPeriods: SalaryPeriod[]): AforeResult {
+export function calculateAfore(
+  salaryPeriods: SalaryPeriod[],
+  semanasDescontadas = 0,
+  semanasReconocidas = 0,
+): AforeResult {
   const currentYear = new Date().getUTCFullYear();
   const adjustedPeriods = expandPeriods(salaryPeriods);
 
@@ -275,6 +279,15 @@ export function calculateAfore(salaryPeriods: SalaryPeriod[]): AforeResult {
 
   for (const s of [sar92, vivienda92, retiro, ceavTrabajador, ceavPatron, cuotaSocial, vivienda97]) {
     s.total = s.aportaciones + s.rendimientos;
+  }
+
+  if (semanasDescontadas > 0 && semanasReconocidas > 0) {
+    const factor = 1 - semanasDescontadas / semanasReconocidas;
+    for (const s of [sar92, vivienda92, retiro, ceavTrabajador, ceavPatron, cuotaSocial, vivienda97]) {
+      s.aportaciones = Math.round(s.aportaciones * factor * 100) / 100;
+      s.rendimientos = Math.round(s.rendimientos * factor * 100) / 100;
+      s.total = s.aportaciones + s.rendimientos;
+    }
   }
 
   const totalRCV = ceavTrabajador.total + ceavPatron.total + cuotaSocial.total;

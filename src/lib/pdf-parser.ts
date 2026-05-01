@@ -157,6 +157,7 @@ function parseHeader(text: string): DocumentHeader {
   // These often appear as "149 0" on the same line after their labels
   let semanasDescontadas = 0;
   let semanasReintegradas = 0;
+  let descFound = false;
 
   // Try pattern: both numbers on one line after the labels section (OCR)
   const bothMatch = text.match(
@@ -165,11 +166,12 @@ function parseHeader(text: string): DocumentHeader {
   if (bothMatch) {
     semanasDescontadas = parseInt(bothMatch[1], 10);
     semanasReintegradas = parseInt(bothMatch[2], 10);
+    descFound = true;
   }
 
   // Native inline: "1112   149   0 Semanas cotizadas IMSS"
   // where 1112=IMSS weeks, 149=descontadas, 0=reintegradas
-  if (!semanasDescontadas) {
+  if (!descFound) {
     const nativeWeeks = text.match(
       /(\d{2,4})\s+(\d{1,4})\s+(\d{1,4})\s+Semanas cotizadas IMSS/i
     );
@@ -177,10 +179,11 @@ function parseHeader(text: string): DocumentHeader {
       semanasReconocidas = parseInt(nativeWeeks[1], 10);
       semanasDescontadas = parseInt(nativeWeeks[2], 10);
       semanasReintegradas = parseInt(nativeWeeks[3], 10);
+      descFound = true;
     }
   }
 
-  if (!semanasDescontadas) {
+  if (!descFound) {
     // Try separate extraction
     const descMatch = text.match(
       /Semanas Descontadas[\s\S]{0,80}?(?:recursos\)\s*\(-\))\s*\n?\s*(\d{1,4})/i

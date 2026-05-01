@@ -11,7 +11,11 @@ export function calculateAll(document: ParsedDocument): CalculationResult {
     document.salaryPeriods
   );
   const salaryAverage = calculateSalaryAverage(document.salaryPeriods);
-  const afore = calculateAfore(document.salaryPeriods);
+  const afore = calculateAfore(
+    document.salaryPeriods,
+    document.header.semanasDescontadas,
+    document.header.semanasReconocidas,
+  );
   const advertencias = buildAdvertencias(document, regimen);
 
   const result: CalculationResult = {
