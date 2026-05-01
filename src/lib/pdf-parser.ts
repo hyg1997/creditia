@@ -26,11 +26,13 @@ export function parseOCRText(text: string): ParsedDocument {
   // Fallback: if movement extraction yields no salary periods,
   // derive simple periods from employment records (one period per record)
   if (salaryPeriods.length === 0 && records.length > 0) {
-    salaryPeriods = records.map((r) => ({
-      fechaInicio: r.fechaAlta,
-      fechaFin: r.fechaBaja,
-      salarioDiario: r.salarioBaseCotizacion,
-    }));
+    salaryPeriods = consolidateOverlappingPeriods(
+      records.map((r) => ({
+        fechaInicio: r.fechaAlta,
+        fechaFin: r.fechaBaja,
+        salarioDiario: r.salarioBaseCotizacion,
+      }))
+    );
   }
 
   return { header, records, movements, salaryPeriods };
@@ -1036,13 +1038,42 @@ function parseMovements(text: string): Movement[] {
   return allMovements;
 }
 
-/**
- * Keep all salary periods separate (one per employer) for accurate AFORE calculation.
- * Each employer contributes independently up to 25 UMAs — merging salaries would
- * distort the per-employer cap. Periods are sorted by start date for consistency.
- */
+const MS_PER_DAY = 86_400_000;
+
 function consolidateOverlappingPeriods(periods: SalaryPeriod[]): SalaryPeriod[] {
-  return [...periods].sort((a, b) => a.fechaInicio.getTime() - b.fechaInicio.getTime());
+  if (periods.length <= 1) return [...periods];
+
+  const events: { time: number; delta: number }[] = [];
+  for (const p of periods) {
+    events.push({ time: p.fechaInicio.getTime(), delta: p.salarioDiario });
+    events.push({ time: p.fechaFin.getTime() + MS_PER_DAY, delta: -p.salarioDiario });
+  }
+  events.sort((a, b) => a.time - b.time);
+
+  const result: SalaryPeriod[] = [];
+  let salary = 0;
+  let segStart = events[0].time;
+
+  for (let i = 0; i < events.length; ) {
+    const t = events[i].time;
+
+    if (salary > 0 && t > segStart) {
+      result.push({
+        fechaInicio: new Date(segStart),
+        fechaFin: new Date(t - MS_PER_DAY),
+        salarioDiario: Math.round(salary * 100) / 100,
+      });
+    }
+
+    while (i < events.length && events[i].time === t) {
+      salary += events[i].delta;
+      i++;
+    }
+    salary = Math.round(salary * 100) / 100;
+    segStart = t;
+  }
+
+  return result;
 }
 
 /**
