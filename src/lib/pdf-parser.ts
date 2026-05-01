@@ -21,7 +21,7 @@ export function parseOCRText(text: string): ParsedDocument {
 
   // Extract report emission date for "Vigente" (active employment) calculations
   const reportDate = extractReportDate(text);
-  let salaryPeriods = deriveSalaryPeriods(movements, reportDate);
+  let salaryPeriods = consolidateOverlappingPeriods(deriveSalaryPeriods(movements, reportDate));
 
   // Fallback: if movement extraction yields no salary periods,
   // derive simple periods from employment records (one period per record)
@@ -1034,6 +1034,15 @@ function parseMovements(text: string): Movement[] {
   }
 
   return allMovements;
+}
+
+/**
+ * Keep all salary periods separate (one per employer) for accurate AFORE calculation.
+ * Each employer contributes independently up to 25 UMAs — merging salaries would
+ * distort the per-employer cap. Periods are sorted by start date for consistency.
+ */
+function consolidateOverlappingPeriods(periods: SalaryPeriod[]): SalaryPeriod[] {
+  return [...periods].sort((a, b) => a.fechaInicio.getTime() - b.fechaInicio.getTime());
 }
 
 /**

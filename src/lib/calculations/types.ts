@@ -1,3 +1,5 @@
+export type Regimen = "ley73" | "ley97";
+
 export interface EmploymentRecord {
   patron: string;
   registroPatronal: string;
@@ -36,43 +38,41 @@ export interface ParsedDocument {
   salaryPeriods: SalaryPeriod[];
 }
 
+export interface SubcuentaTotal {
+  aportaciones: number;
+  rendimientos: number;
+  total: number;
+}
+
 export interface PeriodAfore {
   year: number;
   salarioDiario: number;
   dias: number;
   totalSalario: number;
   sar92: number;
-  sar92Rendimientos: number;
-  sar97: number;
-  sar97Rendimientos: number;
-  rcvTrabajador: number;
-  rcvTrabajadorRendimientos: number;
-  rcvPatron: number;
-  rcvPatronRendimientos: number;
   vivienda92: number;
-  vivienda92Rendimientos: number;
+  retiro: number;
+  ceavTrabajador: number;
+  ceavPatron: number;
+  cuotaSocial: number;
   vivienda97: number;
-  vivienda97Rendimientos: number;
 }
 
 export interface AforeResult {
+  sar92: SubcuentaTotal;
+  vivienda92: SubcuentaTotal;
+  retiro: SubcuentaTotal;
+  ceavTrabajador: SubcuentaTotal;
+  ceavPatron: SubcuentaTotal;
+  cuotaSocial: SubcuentaTotal;
+  vivienda97: SubcuentaTotal;
+
+  totalRCV: number;
+  totalSAR92: number;
+  totalVivienda: number;
+  saldoTotal: number;
+
   periods: PeriodAfore[];
-  totals: {
-    sar92: number;
-    sar92Rendimientos: number;
-    sar97: number;
-    sar97Rendimientos: number;
-    rcvTrabajador: number;
-    rcvTrabajadorRendimientos: number;
-    rcvPatron: number;
-    rcvPatronRendimientos: number;
-    vivienda92: number;
-    vivienda92Rendimientos: number;
-    vivienda97: number;
-    vivienda97Rendimientos: number;
-  };
-  saldoAfore: number; // (SAR92+rend) + (SAR97+rend) + (Viv92+rend) + (Viv97+rend)
-  saldoRCV: number; // (RCV trab+rend) + (RCV patron+rend) - separate
 }
 
 export interface SalaryAverageResult {
@@ -88,9 +88,29 @@ export interface SalaryAverageResult {
   }[];
 }
 
+export interface PensionLey73Estimate {
+  sbcPromedioDiario: number;
+  sbcPromedioMensual: number;
+  semanasReconocidas: number;
+  grupoSalarial: number;
+  cuantiaBasicaPct: number;
+  incrementoAnualPct: number;
+  anosExcedentes: number;
+  porcentajeTotal: number;
+  estimaciones: {
+    edad: number;
+    factorEdad: number;
+    pensionMensual: number;
+  }[];
+  pensionMinima: number;
+}
+
 export interface CalculationResult {
+  regimen: Regimen;
   header: DocumentHeader;
   records: EmploymentRecord[];
   salaryAverage: SalaryAverageResult;
   afore: AforeResult;
+  pensionLey73?: PensionLey73Estimate;
+  advertencias: string[];
 }
