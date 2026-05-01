@@ -9,33 +9,35 @@ export async function POST(request: NextRequest) {
 
     if (!text || typeof text !== "string") {
       return NextResponse.json(
-        { error: "Se requiere el texto extraído del PDF" },
+        { error: "Se requiere el texto extraido del PDF" },
         { status: 400 }
       );
     }
 
     if (text.length < 100) {
       return NextResponse.json(
-        { error: "El texto extraído es muy corto. Verifica que el PDF sea una Constancia de Semanas Cotizadas." },
+        {
+          error:
+            "El texto extraido es muy corto. Verifica que el PDF sea una Constancia de Semanas Cotizadas.",
+        },
         { status: 400 }
       );
     }
 
-    // Parse the OCR text
     const parsed = parseOCRText(text);
 
     if (parsed.records.length === 0 && parsed.salaryPeriods.length === 0) {
       return NextResponse.json(
-        { error: "No se encontraron registros laborales en el PDF. Verifica que sea una Constancia de Semanas Cotizadas del IMSS." },
+        {
+          error:
+            "No se encontraron registros laborales en el PDF. Verifica que sea una Constancia de Semanas Cotizadas del IMSS.",
+        },
         { status: 400 }
       );
     }
 
-    // Calculate everything
     const result = calculateAll(parsed);
 
-    // Serialize dates for JSON response
-    // Serialize dates as DD/MM/YYYY strings to avoid timezone issues
     const fmtDate = (d: Date) => {
       const day = d.getUTCDate().toString().padStart(2, "0");
       const month = (d.getUTCMonth() + 1).toString().padStart(2, "0");
@@ -43,6 +45,7 @@ export async function POST(request: NextRequest) {
     };
 
     const serialized = {
+      regimen: result.regimen,
       header: result.header,
       records: result.records.map((r) => ({
         ...r,
@@ -58,6 +61,8 @@ export async function POST(request: NextRequest) {
         })),
       },
       afore: result.afore,
+      pensionLey73: result.pensionLey73 ?? null,
+      advertencias: result.advertencias,
     };
 
     return NextResponse.json(serialized);

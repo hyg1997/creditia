@@ -17,101 +17,61 @@ import {
 } from "@/components/ui/table";
 import { formatMXN } from "@/lib/formatters";
 
-interface AforeTotals {
-  sar92: number;
-  sar92Rendimientos: number;
-  sar97: number;
-  sar97Rendimientos: number;
-  rcvTrabajador: number;
-  rcvTrabajadorRendimientos: number;
-  rcvPatron: number;
-  rcvPatronRendimientos: number;
-  vivienda92: number;
-  vivienda92Rendimientos: number;
-  vivienda97: number;
-  vivienda97Rendimientos: number;
+interface SubcuentaTotal {
+  aportaciones: number;
+  rendimientos: number;
+  total: number;
 }
 
 interface AforeBreakdownProps {
   afore: {
-    totals: AforeTotals;
-    saldoAfore: number;
-    saldoRCV: number;
+    sar92: SubcuentaTotal;
+    vivienda92: SubcuentaTotal;
+    retiro: SubcuentaTotal;
+    ceavTrabajador: SubcuentaTotal;
+    ceavPatron: SubcuentaTotal;
+    cuotaSocial: SubcuentaTotal;
+    vivienda97: SubcuentaTotal;
+    totalRCV: number;
+    totalSAR92: number;
+    totalVivienda: number;
+    saldoTotal: number;
   };
 }
 
-export function AforeBreakdown({ afore }: AforeBreakdownProps) {
-  const { totals } = afore;
-
-  const rows = [
-    {
-      concepto: "SAR 92",
-      aportacion: totals.sar92,
-      rendimientos: totals.sar92Rendimientos,
-      subtotal: totals.sar92 + totals.sar92Rendimientos,
-    },
-    {
-      concepto: "SAR 97",
-      aportacion: totals.sar97,
-      rendimientos: totals.sar97Rendimientos,
-      subtotal: totals.sar97 + totals.sar97Rendimientos,
-    },
-    {
-      concepto: "Vivienda 92",
-      aportacion: totals.vivienda92,
-      rendimientos: totals.vivienda92Rendimientos,
-      subtotal: totals.vivienda92 + totals.vivienda92Rendimientos,
-    },
-    {
-      concepto: "Vivienda 97",
-      aportacion: totals.vivienda97,
-      rendimientos: totals.vivienda97Rendimientos,
-      subtotal: totals.vivienda97 + totals.vivienda97Rendimientos,
-    },
-  ];
-
-  const rcvRows = [
-    {
-      concepto: "RCV Trabajador (1.125%)",
-      aportacion: totals.rcvTrabajador,
-      rendimientos: totals.rcvTrabajadorRendimientos,
-      subtotal: totals.rcvTrabajador + totals.rcvTrabajadorRendimientos,
-    },
-    {
-      concepto: "RCV Patron (3.15%)",
-      aportacion: totals.rcvPatron,
-      rendimientos: totals.rcvPatronRendimientos,
-      subtotal: totals.rcvPatron + totals.rcvPatronRendimientos,
-    },
-  ];
-
+function SubcuentaTable({ title, rows, totalLabel, totalAmount }: {
+  title: string;
+  rows: { concepto: string; aportacion: number; rendimientos: number; subtotal: number }[];
+  totalLabel: string;
+  totalAmount: number;
+}) {
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Desglose Saldo AFORE</CardTitle>
-        </CardHeader>
-        <CardContent>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-xs sm:text-sm font-semibold tracking-tight">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="px-3 sm:px-5">
+        <div className="overflow-x-auto -mx-3 sm:-mx-0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Concepto</TableHead>
-                <TableHead className="text-right">Aportacion</TableHead>
-                <TableHead className="text-right">Rendimientos</TableHead>
-                <TableHead className="text-right">Subtotal</TableHead>
+                <TableHead className="text-[10px] sm:text-xs">Concepto</TableHead>
+                <TableHead className="text-right text-[10px] sm:text-xs">Aportación</TableHead>
+                <TableHead className="text-right text-[10px] sm:text-xs">Rendimientos</TableHead>
+                <TableHead className="text-right text-[10px] sm:text-xs">Subtotal</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((row) => (
                 <TableRow key={row.concepto}>
-                  <TableCell className="font-medium">{row.concepto}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="font-medium text-[10px] sm:text-xs">{row.concepto}</TableCell>
+                  <TableCell className="text-right text-[10px] sm:text-xs font-mono">
                     {formatMXN(row.aportacion)}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right text-[10px] sm:text-xs font-mono">
                     {formatMXN(row.rendimientos)}
                   </TableCell>
-                  <TableCell className="text-right font-semibold">
+                  <TableCell className="text-right text-[10px] sm:text-xs font-mono font-semibold">
                     {formatMXN(row.subtotal)}
                   </TableCell>
                 </TableRow>
@@ -119,71 +79,103 @@ export function AforeBreakdown({ afore }: AforeBreakdownProps) {
             </TableBody>
             <TableFooter>
               <TableRow>
-                <TableCell className="font-bold">Total AFORE</TableCell>
-                <TableCell className="text-right font-bold">
+                <TableCell className="font-bold text-[10px] sm:text-xs">{totalLabel}</TableCell>
+                <TableCell className="text-right font-bold text-[10px] sm:text-xs font-mono">
                   {formatMXN(rows.reduce((s, r) => s + r.aportacion, 0))}
                 </TableCell>
-                <TableCell className="text-right font-bold">
+                <TableCell className="text-right font-bold text-[10px] sm:text-xs font-mono">
                   {formatMXN(rows.reduce((s, r) => s + r.rendimientos, 0))}
                 </TableCell>
-                <TableCell className="text-right font-bold text-primary">
-                  {formatMXN(afore.saldoAfore)}
+                <TableCell className="text-right font-bold text-[10px] sm:text-xs font-mono text-wv-cyan">
+                  {formatMXN(totalAmount)}
                 </TableCell>
               </TableRow>
             </TableFooter>
           </Table>
-        </CardContent>
-      </Card>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">
-            RCV (No incluido en Saldo AFORE)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Concepto</TableHead>
-                <TableHead className="text-right">Aportacion</TableHead>
-                <TableHead className="text-right">Rendimientos</TableHead>
-                <TableHead className="text-right">Subtotal</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rcvRows.map((row) => (
-                <TableRow key={row.concepto}>
-                  <TableCell className="font-medium">{row.concepto}</TableCell>
-                  <TableCell className="text-right">
-                    {formatMXN(row.aportacion)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {formatMXN(row.rendimientos)}
-                  </TableCell>
-                  <TableCell className="text-right font-semibold">
-                    {formatMXN(row.subtotal)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-            <TableFooter>
-              <TableRow>
-                <TableCell className="font-bold">Total RCV</TableCell>
-                <TableCell className="text-right font-bold">
-                  {formatMXN(rcvRows.reduce((s, r) => s + r.aportacion, 0))}
-                </TableCell>
-                <TableCell className="text-right font-bold">
-                  {formatMXN(rcvRows.reduce((s, r) => s + r.rendimientos, 0))}
-                </TableCell>
-                <TableCell className="text-right font-bold">
-                  {formatMXN(afore.saldoRCV)}
-                </TableCell>
-              </TableRow>
-            </TableFooter>
-          </Table>
-        </CardContent>
-      </Card>
+export function AforeBreakdown({ afore }: AforeBreakdownProps) {
+  const saldoAfore = afore.totalSAR92 + afore.retiro.total;
+
+  const aforeRows = [
+    {
+      concepto: "SAR 92",
+      aportacion: afore.sar92.aportaciones,
+      rendimientos: afore.sar92.rendimientos,
+      subtotal: afore.sar92.total,
+    },
+    {
+      concepto: "SAR 97 (Retiro)",
+      aportacion: afore.retiro.aportaciones,
+      rendimientos: afore.retiro.rendimientos,
+      subtotal: afore.retiro.total,
+    },
+  ];
+
+  const rcvRows = [
+    {
+      concepto: "Trabajador (1.125%)",
+      aportacion: afore.ceavTrabajador.aportaciones,
+      rendimientos: afore.ceavTrabajador.rendimientos,
+      subtotal: afore.ceavTrabajador.total,
+    },
+    {
+      concepto: "Patrón (3.15%)",
+      aportacion: afore.ceavPatron.aportaciones,
+      rendimientos: afore.ceavPatron.rendimientos,
+      subtotal: afore.ceavPatron.total,
+    },
+    ...(afore.cuotaSocial.aportaciones > 0
+      ? [
+          {
+            concepto: "Cuota Social",
+            aportacion: afore.cuotaSocial.aportaciones,
+            rendimientos: afore.cuotaSocial.rendimientos,
+            subtotal: afore.cuotaSocial.total,
+          },
+        ]
+      : []),
+  ];
+
+  const viviendaRows = [
+    {
+      concepto: "Vivienda 92",
+      aportacion: afore.vivienda92.aportaciones,
+      rendimientos: afore.vivienda92.rendimientos,
+      subtotal: afore.vivienda92.total,
+    },
+    {
+      concepto: "Vivienda 97",
+      aportacion: afore.vivienda97.aportaciones,
+      rendimientos: afore.vivienda97.rendimientos,
+      subtotal: afore.vivienda97.total,
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
+      <SubcuentaTable
+        title="Saldo AFORE (SAR)"
+        rows={aforeRows}
+        totalLabel="Total SAR"
+        totalAmount={saldoAfore}
+      />
+      <SubcuentaTable
+        title="RCV"
+        rows={rcvRows}
+        totalLabel="Total RCV"
+        totalAmount={afore.totalRCV}
+      />
+      <SubcuentaTable
+        title="Vivienda (INFONAVIT)"
+        rows={viviendaRows}
+        totalLabel="Total Vivienda"
+        totalAmount={afore.totalVivienda}
+      />
     </div>
   );
 }

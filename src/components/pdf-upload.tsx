@@ -2,7 +2,6 @@
 
 import { useCallback, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 
 interface PdfUploadProps {
   onTextExtracted: (text: string) => void;
@@ -46,7 +45,6 @@ export function PdfUpload({ onTextExtracted, isProcessing }: PdfUploadProps) {
         setOcrProgress(`PDF cargado. ${numPages} páginas. Extrayendo texto...`);
         setOcrPercent(10);
 
-        // ── Strategy 1: Try native text extraction (instant for digital PDFs) ──
         let fullText = "";
         let nativeTextLength = 0;
 
@@ -60,23 +58,19 @@ export function PdfUpload({ onTextExtracted, isProcessing }: PdfUploadProps) {
           nativeTextLength += pageText.replace(/\s/g, "").length;
         }
 
-        // If native extraction got enough text, use it (no OCR needed)
-        // Threshold: at least 50 non-whitespace chars per page on average
         if (nativeTextLength > numPages * 50) {
-          setOcrProgress("Texto extraido directamente (PDF digital).");
+          setOcrProgress("Texto extraído directamente (PDF digital).");
           setOcrPercent(95);
           onTextExtracted(fullText);
           return;
         }
 
-        // ── Strategy 2: OCR with parallel workers (for scanned PDFs) ──
         setOcrProgress("PDF escaneado detectado. Iniciando OCR...");
         setOcrPercent(15);
 
         const Tesseract = (await import("tesseract.js")).default;
         const workerCount = Math.min(MAX_WORKERS, numPages);
 
-        // Create scheduler with multiple workers
         const scheduler = Tesseract.createScheduler();
         for (let w = 0; w < workerCount; w++) {
           const worker = await Tesseract.createWorker("spa");
@@ -86,7 +80,6 @@ export function PdfUpload({ onTextExtracted, isProcessing }: PdfUploadProps) {
         setOcrProgress(`OCR con ${workerCount} workers en paralelo...`);
         setOcrPercent(20);
 
-        // Render all pages to canvas and queue OCR jobs in parallel
         let completedPages = 0;
         const pageTexts: string[] = new Array(numPages).fill("");
 
@@ -102,7 +95,6 @@ export function PdfUpload({ onTextExtracted, isProcessing }: PdfUploadProps) {
 
           const { data: { text } } = await scheduler.addJob("recognize", canvas);
 
-          // Clean up canvas memory
           canvas.width = 0;
           canvas.height = 0;
 
@@ -114,7 +106,6 @@ export function PdfUpload({ onTextExtracted, isProcessing }: PdfUploadProps) {
           setOcrProgress(`OCR: ${completedPages}/${numPages} páginas...`);
         };
 
-        // Launch all pages concurrently — scheduler distributes across workers
         await Promise.all(
           Array.from({ length: numPages }, (_, i) => ocrPage(i + 1))
         );
@@ -175,26 +166,24 @@ export function PdfUpload({ onTextExtracted, isProcessing }: PdfUploadProps) {
   const isDisabled = isProcessing || !!ocrProgress;
 
   return (
-    <Card
-      className={`border-2 border-dashed transition-colors ${
+    <div
+      className={`relative rounded-[16px] border-2 border-dashed transition-all duration-200 ${
         isDragging
-          ? "border-primary bg-primary/5"
+          ? "border-wv-cyan bg-wv-cyan/5 scale-[1.01]"
           : isDisabled
-            ? "border-muted bg-muted/30"
-            : "border-muted-foreground/25 hover:border-primary/50"
+            ? "border-wv-border bg-muted/30"
+            : "border-wv-border hover:border-wv-cyan/50 hover:bg-wv-cyan/5"
       }`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
-      <CardContent
-        className="flex flex-col items-center justify-center py-12 px-6"
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
+      <div className="flex flex-col items-center justify-center py-8 sm:py-12 px-4 sm:px-6">
         {ocrProgress ? (
-          <div className="text-center space-y-4 w-full max-w-md">
-            <div className="text-4xl">
+          <div className="text-center space-y-3 sm:space-y-4 w-full max-w-md">
+            <div className="inline-flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl bg-wv-cyan/10">
               <svg
-                className="animate-spin h-10 w-10 mx-auto text-primary"
+                className="animate-spin h-5 w-5 sm:h-6 sm:w-6 text-wv-cyan"
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
                 viewBox="0 0 24 24"
@@ -214,24 +203,23 @@ export function PdfUpload({ onTextExtracted, isProcessing }: PdfUploadProps) {
                 />
               </svg>
             </div>
-            <p className="text-sm font-medium">{ocrProgress}</p>
-            <div className="w-full bg-muted rounded-full h-2.5">
+            <p className="text-xs sm:text-sm font-medium">{ocrProgress}</p>
+            <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
               <div
-                className="bg-primary h-2.5 rounded-full transition-all duration-300"
+                className="bg-wv-cyan h-1.5 rounded-full transition-all duration-500 ease-out"
                 style={{ width: `${ocrPercent}%` }}
               />
             </div>
-            <p className="text-xs text-muted-foreground">
-              PDFs digitales: instantaneo. Escaneados: ~30s con OCR paralelo.
+            <p className="text-[10px] sm:text-xs text-muted-foreground">
+              PDFs digitales: instantáneo. Escaneados: ~30s con OCR paralelo.
             </p>
           </div>
         ) : (
           <>
-            <div className="text-5xl mb-4 opacity-60">
+            <div className="inline-flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-2xl bg-muted/80 text-muted-foreground mb-3 sm:mb-4">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                width="48"
-                height="48"
+                className="w-6 h-6 sm:w-7 sm:h-7"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -245,16 +233,16 @@ export function PdfUpload({ onTextExtracted, isProcessing }: PdfUploadProps) {
                 <path d="m15 15-3-3-3 3" />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold mb-1">
-              Sube tu Constancia de Semanas Cotizadas
-            </h3>
-            <p className="text-muted-foreground text-sm mb-4 text-center">
-              Arrastra y suelta tu PDF aqui, o haz clic para seleccionar
+            <p className="text-xs sm:text-sm font-medium mb-1">
+              Arrastra y suelta tu PDF aquí
+            </p>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mb-3 sm:mb-4">
+              o haz clic para seleccionar
             </p>
             <Button
               onClick={() => fileInputRef.current?.click()}
               disabled={isDisabled}
-              size="lg"
+              className="bg-wv-cyan hover:bg-wv-cyan/80 text-black font-semibold text-xs sm:text-sm h-9 sm:h-10 px-4 sm:px-6"
             >
               Seleccionar PDF
             </Button>
@@ -265,12 +253,12 @@ export function PdfUpload({ onTextExtracted, isProcessing }: PdfUploadProps) {
               className="hidden"
               onChange={handleFileSelect}
             />
-            <p className="text-xs text-muted-foreground mt-3">
-              PDF del IMSS - Maximo 20MB
+            <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-2.5 sm:mt-3">
+              PDF del IMSS — Máximo 20MB
             </p>
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
