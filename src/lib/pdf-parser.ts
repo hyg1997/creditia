@@ -145,10 +145,12 @@ function parseHeader(text: string): DocumentHeader {
   }
 
   // Extract IMSS weeks
+  let semanasReconocidas = 0;
+
+  // OCR: "Semanas cotizadas IMSS\n\n1383"
   const imssWeeksMatch = text.match(
     /Semanas cotizadas IMSS\s*\n+\s*(\d{2,4})/i
   );
-  let semanasReconocidas = 0;
   if (imssWeeksMatch) {
     semanasReconocidas = parseInt(imssWeeksMatch[1], 10);
   }
@@ -183,6 +185,20 @@ function parseHeader(text: string): DocumentHeader {
     }
   }
 
+  // Native pdfjs: labels come first, then 3 numbers grouped together
+  // "Semanas cotizadas IMSS Semanas Descontadas ... (-) Semanas Reintegradas (+) 1383 0 0"
+  if (!descFound) {
+    const nativeAfterLabels = text.match(
+      /Semanas\s+Reintegradas\s*\(\+\)\s+(\d{1,4})\s+(\d{1,4})\s+(\d{1,4})/i
+    );
+    if (nativeAfterLabels) {
+      semanasReconocidas = parseInt(nativeAfterLabels[1], 10);
+      semanasDescontadas = parseInt(nativeAfterLabels[2], 10);
+      semanasReintegradas = parseInt(nativeAfterLabels[3], 10);
+      descFound = true;
+    }
+  }
+
   if (!descFound) {
     // Try separate extraction
     const descMatch = text.match(
@@ -198,6 +214,11 @@ function parseHeader(text: string): DocumentHeader {
     if (reintMatch) {
       semanasReintegradas = parseInt(reintMatch[1], 10);
     }
+  }
+
+  // Fallback: derive totalSemanasCotizadas from IMSS weeks if still 0
+  if (totalSemanasCotizadas === 0 && semanasReconocidas > 0) {
+    totalSemanasCotizadas = semanasReconocidas - semanasDescontadas + semanasReintegradas;
   }
 
   // Validate: if descontadas seems too large for a reintegradas value, swap check
