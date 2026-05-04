@@ -30,7 +30,24 @@ function calcSinTrabajar(records: { fechaBaja: string }[]) {
   return { dias, anos, meses, diasRestantes, ultimaBaja };
 }
 
-const COSTO_DIARIO_SIN_TRABAJAR = 274;
+function formatDiasCompleto(totalDias: number): string {
+  const anos = Math.floor(totalDias / 365);
+  const meses = Math.floor((totalDias % 365) / 30);
+  const dias = totalDias - anos * 365 - meses * 30;
+  const parts: string[] = [];
+  if (anos > 0) parts.push(`${anos}a`);
+  if (meses > 0) parts.push(`${meses}m`);
+  if (dias > 0 || parts.length === 0) parts.push(`${dias}d`);
+  return parts.join(" ");
+}
+
+function getCostoAnualPorSemanas(semanas: number): number {
+  if (semanas >= 1700) return 60000;
+  if (semanas >= 1450) return 70000;
+  if (semanas >= 1200) return 80000;
+  if (semanas >= 1000) return 90000;
+  return 100000;
+}
 const LIMITE_MOD10_DIAS = 4 * 365 + 11 * 30 + 22;
 const LIMITE_MOD40_DIAS = 11 * 30 + 12;
 
@@ -219,6 +236,8 @@ export default function Home() {
   const [result, setResult] = useState<ApiResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [tieneCredito, setTieneCredito] = useState(false);
+  const [montoCredito, setMontoCredito] = useState(0);
 
   const handleTextExtracted = useCallback(async (text: string) => {
     setIsProcessing(true);
@@ -245,6 +264,8 @@ export default function Home() {
   const handleReset = useCallback(() => {
     setResult(null);
     setError(null);
+    setTieneCredito(false);
+    setMontoCredito(0);
   }, []);
 
   const isLey73 = result?.regimen === "ley73";
@@ -252,14 +273,19 @@ export default function Home() {
     ? result.header.totalSemanasCotizadas + result.header.semanasReintegradas
     : 0;
   const cumpleSemanas = semanasTotales >= 900;
+  const viviendaBruta = result ? result.afore.totalVivienda : 0;
+  const descuentoCredito = tieneCredito ? Math.min(montoCredito, viviendaBruta) : 0;
+  const viviendaAjustada = viviendaBruta - descuentoCredito;
   const saldoAfore = result
     ? result.afore.totalSAR92 +
       result.afore.retiro.total +
-      result.afore.totalVivienda
+      viviendaAjustada
     : 0;
   const sinTrabajar = result ? calcSinTrabajar(result.records) : null;
+  const costoAnual = getCostoAnualPorSemanas(semanasTotales);
+  const costoDiario = costoAnual / 365;
   const montoRequerido = sinTrabajar
-    ? sinTrabajar.dias * COSTO_DIARIO_SIN_TRABAJAR
+    ? Math.round(sinTrabajar.dias * costoDiario)
     : 0;
   const cumpleAfore = saldoAfore >= montoRequerido;
   const faltante = Math.max(0, montoRequerido - saldoAfore);
@@ -288,6 +314,13 @@ export default function Home() {
   const mesesSinCotizar = sinTrabajar
     ? sinTrabajar.anos * 12 + sinTrabajar.meses
     : 0;
+
+  const primeraCotizacion = result && result.records.length > 0
+    ? result.records.reduce((earliest, r) => {
+        const fecha = parseDDMMYYYY(r.fechaAlta);
+        return fecha.getTime() < earliest.getTime() ? fecha : earliest;
+      }, parseDDMMYYYY(result.records[0].fechaAlta))
+    : null;
 
   const asesoriaAhoraCumpleEdad = edad >= 60;
   const asesoriaAhoraCumpleMeses = mesesSinCotizar > 12;
@@ -582,7 +615,7 @@ export default function Home() {
                           </p>
                           <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 leading-tight">
                             {isLey73
-                              ? "Antes del 1 de julio de 1997"
+                              ? `Primera cotización: ${primeraCotizacion ? primeraCotizacion.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }) : "Antes del 1 julio 1997"}`
                               : "Después del 1 de julio de 1997"}
                           </p>
                         </div>
@@ -621,8 +654,8 @@ export default function Home() {
                           Saldo AFORE
                         </p>
                         <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
-                          Mín. {formatMXN(100000)}/año sin trabajar (
-                          {formatMXN(COSTO_DIARIO_SIN_TRABAJAR)}/día)
+                          Mín. {formatMXN(costoAnual)}/año sin trabajar (
+                          {formatMXN(Math.round(costoDiario))}/día)
                         </p>
                       </div>
                       <StatusBadge pass={cumpleAfore} />
@@ -703,7 +736,7 @@ export default function Home() {
                             <SubCheck
                               pass={mod10CumpleTiempo}
                               label="Conservación (máx. 4a 11m 22d)"
-                              value={`${diasSinCotizar} días`}
+                              value={`${formatDiasCompleto(diasSinCotizar)} (${diasSinCotizar} días)`}
                             />
                             <SubCheck
                               pass={mod10CumpleSemanas}
@@ -733,8 +766,8 @@ export default function Home() {
                           </div>
                           <SubCheck
                             pass={mod40Cumple}
-                            label={`Máx. ${LIMITE_MOD40_DIAS} días sin cotizar`}
-                            value={`${diasSinCotizar} días`}
+                            label={`Máx. ${formatDiasCompleto(LIMITE_MOD40_DIAS)} sin cotizar`}
+                            value={`${formatDiasCompleto(diasSinCotizar)} (${diasSinCotizar} días)`}
                           />
                         </div>
                       </div>
@@ -773,7 +806,7 @@ export default function Home() {
                           <SubCheck
                             pass={asesoriaAhoraCumpleMeses}
                             label="> 12 meses sin cotizar"
-                            value={`${mesesSinCotizar} meses`}
+                            value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : `${mesesSinCotizar} meses`}
                           />
                         </div>
                       </div>
@@ -807,7 +840,7 @@ export default function Home() {
                           <SubCheck
                             pass={asesoriaFuturoCumpleMeses}
                             label="> 5 meses sin cotizar"
-                            value={`${mesesSinCotizar} meses`}
+                            value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : `${mesesSinCotizar} meses`}
                           />
                         </div>
                       </div>
@@ -825,6 +858,60 @@ export default function Home() {
 
             {isLey73 && (
               <>
+                {/* Crédito INFONAVIT */}
+                <section>
+                  <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
+                    <div className="h-4 w-1 rounded-full bg-wv-cyan" />
+                    <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">
+                      Crédito INFONAVIT
+                    </h2>
+                  </div>
+                  <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none px-4 sm:px-5 py-3 sm:py-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5">
+                      <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={tieneCredito}
+                          onClick={() => {
+                            setTieneCredito(!tieneCredito);
+                            if (tieneCredito) setMontoCredito(0);
+                          }}
+                          className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wv-cyan focus-visible:ring-offset-2 focus-visible:ring-offset-background ${tieneCredito ? "bg-wv-cyan" : "bg-muted"}`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition-transform ${tieneCredito ? "translate-x-5" : "translate-x-0"}`}
+                          />
+                        </button>
+                        <span className="text-xs sm:text-sm font-medium">
+                          ¿Tiene crédito INFONAVIT?
+                        </span>
+                      </label>
+                      {tieneCredito && (
+                        <div className="flex items-center gap-2 flex-1 max-w-xs">
+                          <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">Saldo del crédito:</span>
+                          <div className="relative flex-1">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                            <input
+                              type="number"
+                              min={0}
+                              value={montoCredito || ""}
+                              onChange={(e) => setMontoCredito(Math.max(0, Number(e.target.value)))}
+                              placeholder="0"
+                              className="w-full rounded-lg border border-wv-border bg-background pl-6 pr-3 py-1.5 text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-wv-cyan focus:border-transparent"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {tieneCredito && descuentoCredito > 0 && (
+                      <p className="text-[10px] sm:text-[11px] text-wv-red mt-2.5">
+                        Se descuentan {formatMXN(descuentoCredito)} de vivienda ({formatMXN(viviendaBruta)} → {formatMXN(viviendaAjustada)})
+                      </p>
+                    )}
+                  </div>
+                </section>
+
                 <section>
                   <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
                     <div className="h-4 w-1 rounded-full bg-wv-cyan" />
@@ -838,7 +925,7 @@ export default function Home() {
                       result.afore.totalSAR92 + result.afore.retiro.total
                     }
                     saldoRCV={result.afore.totalRCV}
-                    saldoVivienda={result.afore.totalVivienda}
+                    saldoVivienda={viviendaAjustada}
                     promedioSalarial={result.salaryAverage.promedio}
                     totalSemanas={result.header.totalSemanasCotizadas}
                     totalRecords={
