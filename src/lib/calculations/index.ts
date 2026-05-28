@@ -3,6 +3,7 @@ import { detectRegimen } from "./regime";
 import { calculateSalaryAverage } from "./salary-average";
 import { calculateAfore } from "./afore-balance";
 import { calculatePensionLey73 } from "./pension-ley73";
+import { calculateRetirosDesempleo } from "./retiros-desempleo";
 
 export function calculateAll(document: ParsedDocument): CalculationResult {
   const regimen = detectRegimen(
@@ -16,6 +17,7 @@ export function calculateAll(document: ParsedDocument): CalculationResult {
     document.header.semanasDescontadas,
     document.header.semanasReconocidas,
   );
+  const retirosDesempleo = calculateRetirosDesempleo(document.records);
   const advertencias = buildAdvertencias(document, regimen);
 
   const result: CalculationResult = {
@@ -24,6 +26,7 @@ export function calculateAll(document: ParsedDocument): CalculationResult {
     records: document.records,
     salaryAverage,
     afore,
+    retirosDesempleo,
     advertencias,
   };
 

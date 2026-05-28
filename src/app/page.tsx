@@ -9,6 +9,7 @@ import { AforeBreakdown } from "@/components/afore-breakdown";
 import { EmploymentTimeline } from "@/components/employment-timeline";
 import { SalaryAverageBreakdown } from "@/components/salary-average-breakdown";
 import { PrintButton } from "@/components/print-button";
+import { RetirosDesempleo } from "@/components/retiros-desempleo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { formatMXN } from "@/lib/formatters";
 
@@ -125,6 +126,15 @@ interface SubcuentaTotal {
   total: number;
 }
 
+interface ApiRetiroParcial {
+  fechaBaja: string;
+  fechaReingreso: string;
+  diasDesempleo: number;
+  salarioDiario: number;
+  montoRetiro: number;
+  topeAplicado: boolean;
+}
+
 interface ApiResult {
   regimen: "ley73" | "ley97";
   header: {
@@ -168,6 +178,10 @@ interface ApiResult {
     totalSAR92: number;
     totalVivienda: number;
     saldoTotal: number;
+  };
+  retirosDesempleo: {
+    retiros: ApiRetiroParcial[];
+    totalDevolver: number;
   };
 }
 
@@ -849,6 +863,25 @@ export default function Home() {
                 )}
               </div>
             </section>
+
+            {/* Retiros Parciales por Desempleo */}
+            {isLey73 &&
+              (result.retirosDesempleo.retiros.length > 0 ||
+                result.header.semanasDescontadas > 0) && (
+                <section>
+                  <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
+                    <div className="h-4 w-1 rounded-full bg-wv-red" />
+                    <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">
+                      Retiros por Desempleo
+                    </h2>
+                  </div>
+                  <RetirosDesempleo
+                    retiros={result.retirosDesempleo.retiros}
+                    totalDevolver={result.retirosDesempleo.totalDevolver}
+                    semanasDescontadas={result.header.semanasDescontadas}
+                  />
+                </section>
+              )}
 
             {!isLey73 && (
               <div className="text-center py-2">

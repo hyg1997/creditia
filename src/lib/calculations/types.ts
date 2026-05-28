@@ -105,12 +105,27 @@ export interface PensionLey73Estimate {
   pensionMinima: number;
 }
 
+export interface RetiroParcial {
+  fechaBaja: Date;
+  fechaReingreso: Date;
+  diasDesempleo: number;
+  salarioDiario: number;
+  montoRetiro: number;
+  topeAplicado: boolean;
+}
+
+export interface RetirosDesempleoResult {
+  retiros: RetiroParcial[];
+  totalDevolver: number;
+}
+
 export interface CalculationResult {
   regimen: Regimen;
   header: DocumentHeader;
   records: EmploymentRecord[];
   salaryAverage: SalaryAverageResult;
   afore: AforeResult;
+  retirosDesempleo: RetirosDesempleoResult;
   pensionLey73?: PensionLey73Estimate;
   advertencias: string[];
 }

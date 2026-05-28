@@ -61,6 +61,14 @@ export async function POST(request: NextRequest) {
         })),
       },
       afore: result.afore,
+      retirosDesempleo: {
+        retiros: result.retirosDesempleo.retiros.map((r) => ({
+          ...r,
+          fechaBaja: fmtDate(r.fechaBaja),
+          fechaReingreso: fmtDate(r.fechaReingreso),
+        })),
+        totalDevolver: result.retirosDesempleo.totalDevolver,
+      },
       pensionLey73: result.pensionLey73 ?? null,
       advertencias: result.advertencias,
     };
