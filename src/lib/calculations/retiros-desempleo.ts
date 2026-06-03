@@ -2,7 +2,6 @@ import { EmploymentRecord, RetiroParcial, RetirosDesempleoResult } from "./types
 
 const DIAS_MINIMOS_DESEMPLEO = 46;
 const DIAS_RETIRO = 30;
-const ANOS_ENTRE_RETIROS = 5;
 
 const UMA_DIARIO_POR_AÑO: Record<number, number> = {
   2017: 75.49,
@@ -75,7 +74,6 @@ export function calculateRetirosDesempleo(
 ): RetirosDesempleoResult {
   const merged = mergeEmploymentPeriods(records);
   const retiros: RetiroParcial[] = [];
-  let ultimoRetiroDate: Date | null = null;
 
   for (let i = 0; i < merged.length - 1; i++) {
     const baja = merged[i].fin;
@@ -85,13 +83,6 @@ export function calculateRetirosDesempleo(
     );
 
     if (diasDesempleo < DIAS_MINIMOS_DESEMPLEO) continue;
-
-    if (ultimoRetiroDate) {
-      const anosDesdeUltimo =
-        (baja.getTime() - ultimoRetiroDate.getTime()) /
-        (1000 * 60 * 60 * 24 * 365.25);
-      if (anosDesdeUltimo < ANOS_ENTRE_RETIROS) continue;
-    }
 
     const salario = merged[i].ultimoSalario;
     const year = baja.getUTCFullYear();
@@ -108,8 +99,6 @@ export function calculateRetirosDesempleo(
       montoRetiro,
       topeAplicado,
     });
-
-    ultimoRetiroDate = baja;
   }
 
   return {
