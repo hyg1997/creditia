@@ -877,8 +877,9 @@ export default function Home() {
                   </div>
                   <RetirosDesempleo
                     retiros={result.retirosDesempleo.retiros}
-                    totalDevolver={result.retirosDesempleo.totalDevolver}
                     semanasDescontadas={result.header.semanasDescontadas}
+                    totalRCV={result.afore.totalRCV}
+                    semanasReconocidas={result.header.semanasReconocidas}
                   />
                 </section>
               )}

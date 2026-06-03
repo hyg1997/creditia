@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useMemo } from "react";
 import { formatMXN } from "@/lib/formatters";
 
 interface RetiroParcial {
@@ -13,15 +14,82 @@ interface RetiroParcial {
 
 interface RetirosDesempleoProps {
   retiros: RetiroParcial[];
-  totalDevolver: number;
   semanasDescontadas: number;
+  totalRCV: number;
+  semanasReconocidas: number;
 }
+
+function parseDDMMYYYY(s: string): Date {
+  const [d, m, y] = s.split("/").map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
+const ANOS_ENTRE_RETIROS = 5;
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
+const MS_5_YEARS = ANOS_ENTRE_RETIROS * 365.25 * MS_PER_DAY;
 
 export function RetirosDesempleo({
   retiros,
-  totalDevolver,
   semanasDescontadas,
+  totalRCV,
+  semanasReconocidas,
 }: RetirosDesempleoProps) {
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+
+  const fechasBaja = useMemo(
+    () => retiros.map((r) => parseDDMMYYYY(r.fechaBaja).getTime()),
+    [retiros]
+  );
+
+  const disabledIndices = useMemo(() => {
+    const disabled = new Set<number>();
+    for (const selIdx of selected) {
+      const selTime = fechasBaja[selIdx];
+      for (let i = 0; i < retiros.length; i++) {
+        if (i === selIdx) continue;
+        if (selected.has(i)) continue;
+        const diff = Math.abs(fechasBaja[i] - selTime);
+        if (diff < MS_5_YEARS) {
+          disabled.add(i);
+        }
+      }
+    }
+    return disabled;
+  }, [selected, fechasBaja, retiros.length]);
+
+  const valorPorSemana =
+    semanasReconocidas > 0 ? totalRCV / semanasReconocidas : 0;
+
+  const semanasEstimadas = useMemo(
+    () =>
+      retiros.map((r) =>
+        valorPorSemana > 0 ? Math.round(r.montoRetiro / valorPorSemana) : 0
+      ),
+    [retiros, valorPorSemana]
+  );
+
+  const totales = useMemo(() => {
+    let monto = 0;
+    let semanas = 0;
+    for (const idx of selected) {
+      monto += retiros[idx].montoRetiro;
+      semanas += semanasEstimadas[idx];
+    }
+    return { monto, semanas };
+  }, [selected, retiros, semanasEstimadas]);
+
+  function toggleSelection(idx: number) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) {
+        next.delete(idx);
+      } else {
+        next.add(idx);
+      }
+      return next;
+    });
+  }
+
   if (retiros.length === 0 && semanasDescontadas === 0) return null;
 
   return (
@@ -47,8 +115,7 @@ export function RetirosDesempleo({
                 {semanasDescontadas} semanas descontadas
               </span>
               <span className="text-muted-foreground">
-                {" "}
-                por retiro(s) parcial(es) de desempleo
+                {" "}registradas en la constancia — selecciona los retiros ejercidos
               </span>
             </p>
           </div>
@@ -60,9 +127,7 @@ export function RetirosDesempleo({
               <table className="w-full text-xs sm:text-sm">
                 <thead>
                   <tr className="border-b border-wv-border text-left">
-                    <th className="pb-2 pr-3 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      #
-                    </th>
+                    <th className="pb-2 pr-2 text-center w-8"></th>
                     <th className="pb-2 pr-3 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       Baja
                     </th>
@@ -75,52 +140,119 @@ export function RetirosDesempleo({
                     <th className="pb-2 pr-3 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
                       SBC Diario
                     </th>
+                    <th className="pb-2 pr-3 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
+                      Sem. Desc.
+                    </th>
                     <th className="pb-2 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
                       A Devolver
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {retiros.map((r, i) => (
-                    <tr
-                      key={i}
-                      className="border-b border-wv-border/50 hover:bg-wv-hover transition-colors"
-                    >
-                      <td className="py-2 pr-3 text-muted-foreground">{i + 1}</td>
-                      <td className="py-2 pr-3 font-mono">{r.fechaBaja}</td>
-                      <td className="py-2 pr-3 font-mono">{r.fechaReingreso}</td>
-                      <td className="py-2 pr-3 text-right font-mono">
-                        {r.diasDesempleo}
-                      </td>
-                      <td className="py-2 pr-3 text-right font-mono">
-                        {formatMXN(r.salarioDiario)}
-                      </td>
-                      <td className="py-2 text-right font-mono font-semibold">
-                        {formatMXN(r.montoRetiro)}
-                        {r.topeAplicado && (
-                          <span className="text-[9px] text-wv-cyan ml-1" title="Tope 10× UMA mensual aplicado">
-                            *
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {retiros.map((r, i) => {
+                    const isSelected = selected.has(i);
+                    const isDisabled = disabledIndices.has(i);
+                    return (
+                      <tr
+                        key={i}
+                        className={`border-b border-wv-border/50 transition-colors ${
+                          isDisabled
+                            ? "opacity-40"
+                            : isSelected
+                              ? "bg-wv-cyan/5"
+                              : "hover:bg-wv-hover"
+                        }`}
+                      >
+                        <td className="py-2 pr-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            disabled={isDisabled}
+                            onChange={() => toggleSelection(i)}
+                            className="h-3.5 w-3.5 rounded border-wv-border text-wv-cyan focus:ring-wv-cyan focus:ring-offset-0 disabled:cursor-not-allowed"
+                          />
+                        </td>
+                        <td className="py-2 pr-3 font-mono">{r.fechaBaja}</td>
+                        <td className="py-2 pr-3 font-mono">{r.fechaReingreso}</td>
+                        <td className="py-2 pr-3 text-right font-mono">
+                          {r.diasDesempleo}
+                        </td>
+                        <td className="py-2 pr-3 text-right font-mono">
+                          {formatMXN(r.salarioDiario)}
+                        </td>
+                        <td className="py-2 pr-3 text-right font-mono">
+                          ~{semanasEstimadas[i]}
+                        </td>
+                        <td className="py-2 text-right font-mono font-semibold">
+                          {formatMXN(r.montoRetiro)}
+                          {r.topeAplicado && (
+                            <span className="text-[9px] text-wv-cyan ml-1" title="Tope 10× UMA mensual aplicado">
+                              *
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-wv-border">
-                    <td
-                      colSpan={5}
-                      className="py-2.5 pr-3 text-right font-semibold text-xs sm:text-sm"
-                    >
-                      Total a Devolver
-                    </td>
-                    <td className="py-2.5 text-right font-mono font-bold text-sm sm:text-base text-wv-red">
-                      {formatMXN(totalDevolver)}
-                    </td>
-                  </tr>
-                </tfoot>
               </table>
             </div>
+
+            {/* Summary footer */}
+            {selected.size > 0 && (
+              <div className="rounded-lg border border-wv-border bg-muted/40 p-3 space-y-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+                  <div>
+                    <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                      Retiros seleccionados
+                    </p>
+                    <p className="text-sm sm:text-base font-bold font-mono mt-0.5">
+                      {selected.size}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                      Semanas desc. estimadas
+                    </p>
+                    <p className="text-sm sm:text-base font-bold font-mono mt-0.5">
+                      ~{totales.semanas}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                      Total a devolver
+                    </p>
+                    <p className="text-sm sm:text-base font-bold font-mono mt-0.5 text-wv-red">
+                      {formatMXN(totales.monto)}
+                    </p>
+                  </div>
+                </div>
+
+                {semanasDescontadas > 0 && (
+                  <div className={`flex items-center gap-2 rounded-lg px-3 py-2 ${
+                    totales.semanas === semanasDescontadas
+                      ? "bg-wv-green/10 border border-wv-green/20"
+                      : "bg-wv-cyan/10 border border-wv-cyan/20"
+                  }`}>
+                    <p className="text-xs sm:text-sm">
+                      <span className="font-medium">Constancia:</span>{" "}
+                      <span className="font-mono font-semibold">{semanasDescontadas}</span> sem. descontadas
+                      {" "}<span className="text-muted-foreground">vs</span>{" "}
+                      <span className="font-medium">Selección:</span>{" "}
+                      <span className="font-mono font-semibold">~{totales.semanas}</span> sem. estimadas
+                      {totales.semanas === semanasDescontadas && (
+                        <span className="ml-2 text-wv-green font-semibold">Coincide</span>
+                      )}
+                      {totales.semanas !== semanasDescontadas && (
+                        <span className="ml-2 text-wv-cyan font-medium">
+                          (dif: {totales.semanas > semanasDescontadas ? "+" : ""}{totales.semanas - semanasDescontadas})
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {retiros.some((r) => r.topeAplicado) && (
               <p className="text-[10px] sm:text-[11px] text-muted-foreground">
@@ -130,8 +262,8 @@ export function RetirosDesempleo({
 
             <p className="text-[10px] sm:text-[11px] text-muted-foreground">
               Retiro parcial por desempleo (Art. 191 LSS): 30 días × último SBC.
-              Requisito: 46+ días sin empleo, mín. 5 años entre retiros.
-              Devolución al mismo monto nominal.
+              Periodos bloqueados: mín. 5 años entre retiros.
+              Semanas desc. = monto / (saldo RCV ÷ semanas reconocidas).
             </p>
           </>
         ) : (
