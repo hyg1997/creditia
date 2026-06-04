@@ -15,7 +15,7 @@ interface RetiroParcial {
 interface RetirosDesempleoProps {
   retiros: RetiroParcial[];
   semanasDescontadas: number;
-  totalRCV: number;
+  totalRCVBruto: number;
   semanasReconocidas: number;
 }
 
@@ -31,7 +31,7 @@ const MS_5_YEARS = ANOS_ENTRE_RETIROS * 365.25 * MS_PER_DAY;
 export function RetirosDesempleo({
   retiros,
   semanasDescontadas,
-  totalRCV,
+  totalRCVBruto,
   semanasReconocidas,
 }: RetirosDesempleoProps) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -58,7 +58,7 @@ export function RetirosDesempleo({
   }, [selected, fechasBaja, retiros.length]);
 
   const valorPorSemana =
-    semanasReconocidas > 0 ? totalRCV / semanasReconocidas : 0;
+    semanasReconocidas > 0 ? totalRCVBruto / semanasReconocidas : 0;
 
   const semanasEstimadas = useMemo(
     () =>

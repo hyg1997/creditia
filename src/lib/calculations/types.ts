@@ -68,6 +68,7 @@ export interface AforeResult {
   vivienda97: SubcuentaTotal;
 
   totalRCV: number;
+  totalRCVBruto: number;
   totalSAR92: number;
   totalVivienda: number;
   saldoTotal: number;

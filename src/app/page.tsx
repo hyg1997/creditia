@@ -175,6 +175,7 @@ interface ApiResult {
     cuotaSocial: SubcuentaTotal;
     vivienda97: SubcuentaTotal;
     totalRCV: number;
+    totalRCVBruto: number;
     totalSAR92: number;
     totalVivienda: number;
     saldoTotal: number;
@@ -878,7 +879,7 @@ export default function Home() {
                   <RetirosDesempleo
                     retiros={result.retirosDesempleo.retiros}
                     semanasDescontadas={result.header.semanasDescontadas}
-                    totalRCV={result.afore.totalRCV}
+                    totalRCVBruto={result.afore.totalRCVBruto}
                     semanasReconocidas={result.header.semanasReconocidas}
                   />
                 </section>

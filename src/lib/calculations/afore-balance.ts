@@ -281,6 +281,8 @@ export function calculateAfore(
     s.total = s.aportaciones + s.rendimientos;
   }
 
+  const totalRCVBruto = ceavTrabajador.total + ceavPatron.total + cuotaSocial.total;
+
   if (semanasDescontadas > 0 && semanasReconocidas > 0) {
     const factor = 1 - semanasDescontadas / semanasReconocidas;
     for (const s of [sar92, vivienda92, retiro, ceavTrabajador, ceavPatron, cuotaSocial, vivienda97]) {
@@ -304,6 +306,7 @@ export function calculateAfore(
     cuotaSocial,
     vivienda97,
     totalRCV,
+    totalRCVBruto,
     totalSAR92,
     totalVivienda,
     saldoTotal,
