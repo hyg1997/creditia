@@ -66,23 +66,15 @@ export function RetirosDesempleo({
   const valorPorSemana =
     semanasReconocidas > 0 ? totalRCVBruto / semanasReconocidas : 0;
 
-  const semanasEstimadas = useMemo(
-    () =>
-      retiros.map((r) =>
-        valorPorSemana > 0 ? Math.round(r.montoRetiro / valorPorSemana) : 0
-      ),
-    [retiros, valorPorSemana]
-  );
+  const totalDevolver = semanasDescontadas * valorPorSemana;
 
-  const totales = useMemo(() => {
-    let monto = 0;
-    let semanas = 0;
+  const maxRetiroSeleccion = useMemo(() => {
+    let total = 0;
     for (const idx of selected) {
-      monto += retiros[idx].montoRetiro;
-      semanas += semanasEstimadas[idx];
+      total += retiros[idx].montoRetiro;
     }
-    return { monto, semanas };
-  }, [selected, retiros, semanasEstimadas]);
+    return total;
+  }, [selected, retiros]);
 
   function toggleSelection(idx: number) {
     setSelected((prev) => {
@@ -100,7 +92,8 @@ export function RetirosDesempleo({
 
   return (
     <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-      <div className="px-4 sm:px-5 py-3 sm:py-4 space-y-3">
+      <div className="px-4 sm:px-5 py-3 sm:py-4 space-y-4">
+        {/* Alert: semanas descontadas */}
         {semanasDescontadas > 0 && (
           <div className="flex items-center gap-2 rounded-lg bg-wv-red/10 border border-wv-red/20 px-3 py-2">
             <svg
@@ -121,14 +114,56 @@ export function RetirosDesempleo({
                 {semanasDescontadas} semanas descontadas
               </span>
               <span className="text-muted-foreground">
-                {" "}registradas en la constancia — selecciona los retiros ejercidos
+                {" "}registradas en la constancia por retiro(s) parcial(es)
               </span>
             </p>
           </div>
         )}
 
+        {/* Calculation: monto a devolver from semanas descontadas */}
+        {semanasDescontadas > 0 && valorPorSemana > 0 && (
+          <div className="space-y-2.5">
+            <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Cálculo del monto a devolver
+            </p>
+            <div className="rounded-lg bg-muted/40 border border-wv-border p-3 space-y-2 font-mono text-xs sm:text-sm">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-muted-foreground">Valor por semana</span>
+                <span>=</span>
+                <span className="text-muted-foreground">Saldo RCV bruto</span>
+                <span>/</span>
+                <span className="text-muted-foreground">Semanas reconocidas</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-muted-foreground">Valor por semana</span>
+                <span>=</span>
+                <span>{formatMXN(totalRCVBruto)}</span>
+                <span>/</span>
+                <span>{semanasReconocidas}</span>
+                <span>=</span>
+                <span className="font-semibold">{formatMXN(valorPorSemana)}</span>
+              </div>
+              <div className="border-t border-wv-border/50 pt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-muted-foreground">Total a devolver</span>
+                <span>=</span>
+                <span>{semanasDescontadas} sem.</span>
+                <span>&times;</span>
+                <span>{formatMXN(valorPorSemana)}</span>
+                <span>=</span>
+                <span className="font-bold text-sm sm:text-base text-wv-red">
+                  {formatMXN(totalDevolver)}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Eligible periods table */}
         {retiros.length > 0 ? (
-          <>
+          <div className="space-y-2.5">
+            <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Periodos de desempleo elegibles para retiro parcial
+            </p>
             <div className="overflow-x-auto -mx-4 sm:-mx-5 px-4 sm:px-5">
               <table className="w-full text-xs sm:text-sm">
                 <thead>
@@ -144,13 +179,10 @@ export function RetirosDesempleo({
                       Días
                     </th>
                     <th className="pb-2 pr-3 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
-                      SBC Diario
-                    </th>
-                    <th className="pb-2 pr-3 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
-                      Sem. Desc.
+                      Último SBC
                     </th>
                     <th className="pb-2 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
-                      A Devolver
+                      Máx. retiro posible
                     </th>
                   </tr>
                 </thead>
@@ -158,6 +190,7 @@ export function RetirosDesempleo({
                   {retiros.map((r, i) => {
                     const isSelected = selected.has(i);
                     const isDisabled = disabledIndices.has(i);
+                    const isCurrent = isCurrentGap(r.fechaReingreso);
                     return (
                       <tr
                         key={i}
@@ -180,7 +213,7 @@ export function RetirosDesempleo({
                         </td>
                         <td className="py-2 pr-3 font-mono">{r.fechaBaja}</td>
                         <td className="py-2 pr-3 font-mono">
-                          {i === retiros.length - 1 && r.fechaReingreso === retiros[i].fechaReingreso && isCurrentGap(r.fechaReingreso)
+                          {isCurrent
                             ? <span className="text-wv-cyan italic">Actual</span>
                             : r.fechaReingreso}
                         </td>
@@ -190,10 +223,7 @@ export function RetirosDesempleo({
                         <td className="py-2 pr-3 text-right font-mono">
                           {formatMXN(r.salarioDiario)}
                         </td>
-                        <td className="py-2 pr-3 text-right font-mono">
-                          ~{semanasEstimadas[i]}
-                        </td>
-                        <td className="py-2 text-right font-mono font-semibold">
+                        <td className="py-2 text-right font-mono text-muted-foreground">
                           {formatMXN(r.montoRetiro)}
                           {r.topeAplicado && (
                             <span className="text-[9px] text-wv-cyan ml-1" title="Tope 10× UMA mensual aplicado">
@@ -208,57 +238,47 @@ export function RetirosDesempleo({
               </table>
             </div>
 
-            {/* Summary footer */}
+            {/* Comparison when selections made */}
             {selected.size > 0 && (
-              <div className="rounded-lg border border-wv-border bg-muted/40 p-3 space-y-2">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
-                  <div>
-                    <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-                      Retiros seleccionados
-                    </p>
-                    <p className="text-sm sm:text-base font-bold font-mono mt-0.5">
-                      {selected.size}
-                    </p>
+              <div className="rounded-lg border border-wv-border bg-muted/40 p-3 space-y-2.5">
+                <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Verificación de selección
+                </p>
+                <div className="font-mono text-xs sm:text-sm space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="text-muted-foreground">Máx. retiro posible ({selected.size} periodo{selected.size > 1 ? "s" : ""}):</span>
+                    <span className="font-semibold">{formatMXN(maxRetiroSeleccion)}</span>
+                    <span className="text-[10px] text-muted-foreground">(30 días × SBC de cada periodo)</span>
                   </div>
-                  <div>
-                    <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-                      Semanas desc. estimadas
-                    </p>
-                    <p className="text-sm sm:text-base font-bold font-mono mt-0.5">
-                      ~{totales.semanas}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-                      Total a devolver
-                    </p>
-                    <p className="text-sm sm:text-base font-bold font-mono mt-0.5 text-wv-red">
-                      {formatMXN(totales.monto)}
-                    </p>
-                  </div>
+                  {semanasDescontadas > 0 && (
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="text-muted-foreground">Monto real a devolver (según constancia):</span>
+                      <span className="font-bold text-wv-red">{formatMXN(totalDevolver)}</span>
+                      <span className="text-[10px] text-muted-foreground">({semanasDescontadas} sem. × {formatMXN(valorPorSemana)})</span>
+                    </div>
+                  )}
                 </div>
-
-                {semanasDescontadas > 0 && (
-                  <div className={`flex items-center gap-2 rounded-lg px-3 py-2 ${
-                    totales.semanas === semanasDescontadas
+                {semanasDescontadas > 0 && maxRetiroSeleccion > 0 && (
+                  <div className={`rounded-lg px-3 py-2 text-xs sm:text-sm ${
+                    totalDevolver <= maxRetiroSeleccion
                       ? "bg-wv-green/10 border border-wv-green/20"
-                      : "bg-wv-cyan/10 border border-wv-cyan/20"
+                      : "bg-wv-red/10 border border-wv-red/20"
                   }`}>
-                    <p className="text-xs sm:text-sm">
-                      <span className="font-medium">Constancia:</span>{" "}
-                      <span className="font-mono font-semibold">{semanasDescontadas}</span> sem. descontadas
-                      {" "}<span className="text-muted-foreground">vs</span>{" "}
-                      <span className="font-medium">Selección:</span>{" "}
-                      <span className="font-mono font-semibold">~{totales.semanas}</span> sem. estimadas
-                      {totales.semanas === semanasDescontadas && (
-                        <span className="ml-2 text-wv-green font-semibold">Coincide</span>
-                      )}
-                      {totales.semanas !== semanasDescontadas && (
-                        <span className="ml-2 text-wv-cyan font-medium">
-                          (dif: {totales.semanas > semanasDescontadas ? "+" : ""}{totales.semanas - semanasDescontadas})
+                    {totalDevolver <= maxRetiroSeleccion ? (
+                      <p>
+                        <span className="font-semibold text-wv-green">Consistente</span>
+                        <span className="text-muted-foreground">
+                          {" "}— el monto a devolver ({formatMXN(totalDevolver)}) cabe dentro del máximo retirable de los periodos seleccionados ({formatMXN(maxRetiroSeleccion)})
                         </span>
-                      )}
-                    </p>
+                      </p>
+                    ) : (
+                      <p>
+                        <span className="font-semibold text-wv-red">Inconsistente</span>
+                        <span className="text-muted-foreground">
+                          {" "}— el monto a devolver ({formatMXN(totalDevolver)}) excede el máximo retirable ({formatMXN(maxRetiroSeleccion)}). Verifica la selección de periodos.
+                        </span>
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -266,23 +286,30 @@ export function RetirosDesempleo({
 
             {retiros.some((r) => r.topeAplicado) && (
               <p className="text-[10px] sm:text-[11px] text-muted-foreground">
-                * Monto limitado al tope de 10× UMA mensual vigente en el año de la baja
+                * Máx. retiro limitado al tope de 10× UMA mensual vigente en el año de la baja
               </p>
             )}
-
-            <p className="text-[10px] sm:text-[11px] text-muted-foreground">
-              Retiro parcial por desempleo (Art. 191 LSS): 30 días × último SBC.
-              Periodos bloqueados: mín. 5 años entre retiros.
-              Semanas desc. = monto / (saldo RCV ÷ semanas reconocidas).
-            </p>
-          </>
-        ) : (
+          </div>
+        ) : semanasDescontadas > 0 ? (
           <p className="text-xs sm:text-sm text-muted-foreground">
-            No se detectaron periodos de desempleo elegibles para retiro parcial
-            en el historial laboral, pero la constancia registra semanas
-            descontadas.
+            No se detectaron periodos de desempleo (&ge;46 días, post-1997) en el
+            historial laboral, pero la constancia registra semanas descontadas.
           </p>
-        )}
+        ) : null}
+
+        {/* Reference formulas */}
+        <div className="border-t border-wv-border/50 pt-3 space-y-1.5">
+          <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Referencia — Art. 191 LSS
+          </p>
+          <div className="text-[10px] sm:text-[11px] text-muted-foreground space-y-0.5">
+            <p>Elegibilidad: 46+ días naturales sin empleo, mín. 5 años entre retiros</p>
+            <p>Máx. retiro Modalidad A: 30 días × último SBC (tope: 10× UMA mensual)</p>
+            <p>Máx. retiro Modalidad B: menor entre 90 días × SBC prom. 250 sem. y 11.5% del saldo RCV</p>
+            <p>Semanas descontadas = monto retirado ÷ (saldo RCV ÷ semanas cotizadas) al momento del retiro</p>
+            <p>Devolución: mismo monto nominal retirado, sin intereses</p>
+          </div>
+        </div>
       </div>
     </div>
   );
