@@ -28,6 +28,12 @@ const ANOS_ENTRE_RETIROS = 5;
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 const MS_5_YEARS = ANOS_ENTRE_RETIROS * 365.25 * MS_PER_DAY;
 
+function isCurrentGap(fechaReingreso: string): boolean {
+  const date = parseDDMMYYYY(fechaReingreso);
+  const now = new Date();
+  return Math.abs(date.getTime() - now.getTime()) < 2 * MS_PER_DAY;
+}
+
 export function RetirosDesempleo({
   retiros,
   semanasDescontadas,
@@ -173,7 +179,11 @@ export function RetirosDesempleo({
                           />
                         </td>
                         <td className="py-2 pr-3 font-mono">{r.fechaBaja}</td>
-                        <td className="py-2 pr-3 font-mono">{r.fechaReingreso}</td>
+                        <td className="py-2 pr-3 font-mono">
+                          {i === retiros.length - 1 && r.fechaReingreso === retiros[i].fechaReingreso && isCurrentGap(r.fechaReingreso)
+                            ? <span className="text-wv-cyan italic">Actual</span>
+                            : r.fechaReingreso}
+                        </td>
                         <td className="py-2 pr-3 text-right font-mono">
                           {r.diasDesempleo}
                         </td>

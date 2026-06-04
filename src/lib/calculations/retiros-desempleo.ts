@@ -2,6 +2,7 @@ import { EmploymentRecord, RetiroParcial, RetirosDesempleoResult } from "./types
 
 const DIAS_MINIMOS_DESEMPLEO = 46;
 const DIAS_RETIRO = 30;
+const LEY97_INICIO = Date.UTC(1997, 6, 1); // July 1, 1997
 
 const UMA_DIARIO_POR_AÑO: Record<number, number> = {
   2017: 75.49,
@@ -69,6 +70,34 @@ function mergeEmploymentPeriods(records: EmploymentRecord[]): MergedPeriod[] {
   return merged;
 }
 
+function buildRetiro(
+  baja: Date,
+  reingreso: Date,
+  salario: number,
+): RetiroParcial | null {
+  const diasDesempleo = Math.floor(
+    (reingreso.getTime() - baja.getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  if (diasDesempleo < DIAS_MINIMOS_DESEMPLEO) return null;
+  if (baja.getTime() < LEY97_INICIO) return null;
+
+  const year = baja.getUTCFullYear();
+  const tope = topeUMAMensual(year);
+  const montoCalculado = DIAS_RETIRO * salario;
+  const topeAplicado = montoCalculado > tope;
+  const montoRetiro = Math.min(montoCalculado, tope);
+
+  return {
+    fechaBaja: baja,
+    fechaReingreso: reingreso,
+    diasDesempleo,
+    salarioDiario: salario,
+    montoRetiro,
+    topeAplicado,
+  };
+}
+
 export function calculateRetirosDesempleo(
   records: EmploymentRecord[]
 ): RetirosDesempleoResult {
@@ -76,29 +105,25 @@ export function calculateRetirosDesempleo(
   const retiros: RetiroParcial[] = [];
 
   for (let i = 0; i < merged.length - 1; i++) {
-    const baja = merged[i].fin;
-    const reingreso = merged[i + 1].inicio;
-    const diasDesempleo = Math.floor(
-      (reingreso.getTime() - baja.getTime()) / (1000 * 60 * 60 * 24)
+    const retiro = buildRetiro(
+      merged[i].fin,
+      merged[i + 1].inicio,
+      merged[i].ultimoSalario,
     );
+    if (retiro) retiros.push(retiro);
+  }
 
-    if (diasDesempleo < DIAS_MINIMOS_DESEMPLEO) continue;
-
-    const salario = merged[i].ultimoSalario;
-    const year = baja.getUTCFullYear();
-    const tope = topeUMAMensual(year);
-    const montoCalculado = DIAS_RETIRO * salario;
-    const topeAplicado = montoCalculado > tope;
-    const montoRetiro = Math.min(montoCalculado, tope);
-
-    retiros.push({
-      fechaBaja: baja,
-      fechaReingreso: reingreso,
-      diasDesempleo,
-      salarioDiario: salario,
-      montoRetiro,
-      topeAplicado,
-    });
+  if (merged.length > 0) {
+    const last = merged[merged.length - 1];
+    const hoy = new Date(
+      Date.UTC(
+        new Date().getUTCFullYear(),
+        new Date().getUTCMonth(),
+        new Date().getUTCDate(),
+      )
+    );
+    const retiro = buildRetiro(last.fin, hoy, last.ultimoSalario);
+    if (retiro) retiros.push(retiro);
   }
 
   return {
