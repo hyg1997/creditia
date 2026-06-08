@@ -15,6 +15,8 @@ interface RetiroParcial {
 interface RetirosDesempleoProps {
   retiros: RetiroParcial[];
   semanasDescontadas: number;
+  totalRCVBruto: number;
+  semanasReconocidas: number;
 }
 
 function parseDDMMYYYY(s: string): Date {
@@ -47,10 +49,15 @@ function addDays(dateStr: string, days: number): string {
 export function RetirosDesempleo({
   retiros,
   semanasDescontadas,
+  totalRCVBruto,
+  semanasReconocidas,
 }: RetirosDesempleoProps) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [semanasInput, setSemanasInput] = useState<Record<number, number>>({});
-  const [montoInput, setMontoInput] = useState<Record<number, number>>({});
+  const [semanasInput, setSemanasInput] = useState<Record<number, number | undefined>>({});
+  const [montoInput, setMontoInput] = useState<Record<number, number | undefined>>({});
+
+  const valorPorSemana =
+    semanasReconocidas > 0 ? totalRCVBruto / semanasReconocidas : 0;
 
   const fechasBaja = useMemo(
     () => retiros.map((r) => parseDDMMYYYY(r.fechaBaja).getTime()),
@@ -73,15 +80,34 @@ export function RetirosDesempleo({
     return disabled;
   }, [selected, fechasBaja, retiros.length]);
 
+  function getEffective(i: number) {
+    const semManual = semanasInput[i];
+    const monManual = montoInput[i];
+
+    let semanas = semManual ?? 0;
+    let monto = monManual ?? 0;
+
+    if (semManual !== undefined && monManual === undefined && valorPorSemana > 0) {
+      monto = Math.round(semManual * valorPorSemana * 100) / 100;
+    }
+    if (monManual !== undefined && semManual === undefined && valorPorSemana > 0) {
+      semanas = Math.round(monManual / valorPorSemana);
+    }
+
+    return { semanas, monto };
+  }
+
   const totales = useMemo(() => {
     let semanas = 0;
     let monto = 0;
     for (const idx of selected) {
-      semanas += semanasInput[idx] || 0;
-      monto += montoInput[idx] || 0;
+      const eff = getEffective(idx);
+      semanas += eff.semanas;
+      monto += eff.monto;
     }
     return { semanas, monto };
-  }, [selected, semanasInput, montoInput]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, semanasInput, montoInput, valorPorSemana]);
 
   const semanasRestantes = semanasDescontadas - totales.semanas;
 
@@ -99,12 +125,28 @@ export function RetirosDesempleo({
     });
   }
 
+  function handleSemanasChange(idx: number, raw: string) {
+    if (raw === "") {
+      setSemanasInput((p) => { const n = { ...p }; n[idx] = undefined; return n; });
+    } else {
+      setSemanasInput((p) => ({ ...p, [idx]: Math.max(0, parseInt(raw) || 0) }));
+    }
+  }
+
+  function handleMontoChange(idx: number, raw: string) {
+    if (raw === "") {
+      setMontoInput((p) => { const n = { ...p }; n[idx] = undefined; return n; });
+    } else {
+      setMontoInput((p) => ({ ...p, [idx]: Math.max(0, parseFloat(raw) || 0) }));
+    }
+  }
+
   if (retiros.length === 0 && semanasDescontadas === 0) return null;
 
   return (
     <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
       <div className="px-4 sm:px-5 py-3 sm:py-4 space-y-4">
-        {/* Alert: semanas descontadas */}
+        {/* Alert */}
         {semanasDescontadas > 0 && (
           <div className="flex items-center gap-2 rounded-lg bg-wv-red/10 border border-wv-red/20 px-3 py-2">
             <svg
@@ -171,6 +213,13 @@ export function RetirosDesempleo({
                     const isDisabled = disabledIndices.has(i);
                     const isCurrent = isCurrentGap(r.fechaReingreso);
                     const rowNum = retiros.length - i;
+
+                    const semManual = semanasInput[i];
+                    const monManual = montoInput[i];
+                    const eff = getEffective(i);
+                    const semDerived = semManual === undefined && monManual !== undefined;
+                    const monDerived = monManual === undefined && semManual !== undefined;
+
                     return (
                       <tr
                         key={i}
@@ -211,13 +260,10 @@ export function RetirosDesempleo({
                             <input
                               type="number"
                               min={0}
-                              value={semanasInput[i] ?? ""}
-                              onChange={(e) => setSemanasInput((p) => ({
-                                ...p,
-                                [i]: Math.max(0, parseInt(e.target.value) || 0),
-                              }))}
+                              value={semManual !== undefined ? semManual : (semDerived ? eff.semanas : "")}
+                              onChange={(e) => handleSemanasChange(i, e.target.value)}
                               placeholder="0"
-                              className="w-16 rounded border border-wv-border bg-background px-1.5 py-0.5 text-xs sm:text-sm font-mono text-right focus:outline-none focus:ring-1 focus:ring-wv-cyan focus:border-transparent"
+                              className={`w-16 rounded border border-wv-border bg-background px-1.5 py-0.5 text-xs sm:text-sm font-mono text-right focus:outline-none focus:ring-1 focus:ring-wv-cyan focus:border-transparent ${semDerived ? "text-wv-cyan/70 italic" : ""}`}
                             />
                           ) : (
                             <span className="text-muted-foreground">—</span>
@@ -230,13 +276,10 @@ export function RetirosDesempleo({
                               <input
                                 type="number"
                                 min={0}
-                                value={montoInput[i] ?? ""}
-                                onChange={(e) => setMontoInput((p) => ({
-                                  ...p,
-                                  [i]: Math.max(0, parseFloat(e.target.value) || 0),
-                                }))}
+                                value={monManual !== undefined ? monManual : (monDerived ? eff.monto : "")}
+                                onChange={(e) => handleMontoChange(i, e.target.value)}
                                 placeholder="0"
-                                className="w-24 rounded border border-wv-border bg-background pl-4 pr-1.5 py-0.5 text-xs sm:text-sm font-mono text-right focus:outline-none focus:ring-1 focus:ring-wv-cyan focus:border-transparent"
+                                className={`w-24 rounded border border-wv-border bg-background pl-4 pr-1.5 py-0.5 text-xs sm:text-sm font-mono text-right focus:outline-none focus:ring-1 focus:ring-wv-cyan focus:border-transparent ${monDerived ? "text-wv-cyan/70 italic" : ""}`}
                               />
                             </div>
                           ) : (
@@ -296,6 +339,11 @@ export function RetirosDesempleo({
                     </p>
                   </div>
                 </div>
+                {valorPorSemana > 0 && (
+                  <p className="text-[10px] sm:text-[11px] text-muted-foreground italic">
+                    Valores en itálica son estimados: valor por semana ≈ {formatMXN(valorPorSemana)} (RCV bruto ÷ sem. reconocidas)
+                  </p>
+                )}
               </div>
             )}
           </div>
