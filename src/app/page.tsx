@@ -92,32 +92,67 @@ function getUltimoRegistro(
   });
 }
 
-function calcSemanasUltimos5Anos(
-  records: { fechaAlta: string; fechaBaja: string }[],
+function calcSemanasIninterrumpidas(
+  records: { fechaAlta: string; fechaBaja: string; registroPatronal: string }[],
   ultimaCotizacion: Date,
 ): number {
-  const cincoAnosAntes = new Date(
+  const MS_DAY = 1000 * 60 * 60 * 24;
+  let windowStart = new Date(
     Date.UTC(
       ultimaCotizacion.getUTCFullYear() - 5,
       ultimaCotizacion.getUTCMonth(),
       ultimaCotizacion.getUTCDate(),
     ),
   );
-  let totalDias = 0;
+
+  // If there's a Mod 40 in the 5-year window, start counting from its end
+  for (const r of records) {
+    const suffix = r.registroPatronal.slice(-2);
+    if (suffix !== "33" && suffix !== "40") continue;
+    const baja = parseDDMMYYYY(r.fechaBaja);
+    if (baja.getTime() >= windowStart.getTime() && baja.getTime() <= ultimaCotizacion.getTime()) {
+      if (baja.getTime() > windowStart.getTime()) {
+        windowStart = baja;
+      }
+    }
+  }
+
+  // Collect and clip periods within the window
+  const periods: { inicio: number; fin: number }[] = [];
   for (const r of records) {
     const alta = parseDDMMYYYY(r.fechaAlta);
     const baja = parseDDMMYYYY(r.fechaBaja);
-    const start =
-      alta.getTime() < cincoAnosAntes.getTime() ? cincoAnosAntes : alta;
-    const end =
-      baja.getTime() > ultimaCotizacion.getTime() ? ultimaCotizacion : baja;
-    if (start.getTime() <= end.getTime()) {
-      totalDias +=
-        Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) +
-        1;
+    const start = Math.max(alta.getTime(), windowStart.getTime());
+    const end = Math.min(baja.getTime(), ultimaCotizacion.getTime());
+    if (start <= end) {
+      periods.push({ inicio: start, fin: end });
     }
   }
-  return Math.floor(totalDias / 7);
+
+  if (periods.length === 0) return 0;
+
+  // Sort by start date and merge overlapping/adjacent (1-day tolerance for baja→alta)
+  periods.sort((a, b) => a.inicio - b.inicio);
+  const merged: { inicio: number; fin: number }[] = [];
+  let cur = { ...periods[0] };
+  for (let i = 1; i < periods.length; i++) {
+    if (periods[i].inicio <= cur.fin + MS_DAY) {
+      cur.fin = Math.max(cur.fin, periods[i].fin);
+    } else {
+      merged.push(cur);
+      cur = { ...periods[i] };
+    }
+  }
+  merged.push(cur);
+
+  // Find the longest continuous stretch
+  let maxDias = 0;
+  for (const p of merged) {
+    const dias = Math.floor((p.fin - p.inicio) / MS_DAY) + 1;
+    if (dias > maxDias) maxDias = dias;
+  }
+
+  return Math.floor(maxDias / 7);
 }
 
 interface SubcuentaTotal {
@@ -317,7 +352,7 @@ export default function Home() {
   const mod10CumpleTiempo = diasSinCotizar <= LIMITE_MOD10_DIAS;
   const semanasEn5Anos =
     result && ultimaCotizacion
-      ? calcSemanasUltimos5Anos(result.records, ultimaCotizacion)
+      ? calcSemanasIninterrumpidas(result.records, ultimaCotizacion)
       : 0;
   const mod10CumpleSemanas = semanasEn5Anos >= 52;
   const mod10Cumple = mod10CumpleTiempo && mod10CumpleSemanas;
@@ -755,7 +790,7 @@ export default function Home() {
                             />
                             <SubCheck
                               pass={mod10CumpleSemanas}
-                              label="Mín. 52 sem. en 5 años"
+                              label="Mín. 52 sem. ininterrumpidas en 5 años"
                               value={`${semanasEn5Anos} semanas`}
                             />
                           </div>
