@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { formatMXN } from "@/lib/formatters";
 
 interface RetiroParcial {
@@ -19,6 +19,11 @@ interface RetirosDesempleoProps {
   semanasReconocidas: number;
 }
 
+interface RowData {
+  semanas: number;
+  monto: number;
+}
+
 function parseDDMMYYYY(s: string): Date {
   const [d, m, y] = s.split("/").map(Number);
   return new Date(Date.UTC(y, m - 1, d));
@@ -28,6 +33,12 @@ function fmtDate(d: Date): string {
   const day = d.getUTCDate().toString().padStart(2, "0");
   const month = (d.getUTCMonth() + 1).toString().padStart(2, "0");
   return `${day}/${month}/${d.getUTCFullYear()}`;
+}
+
+function addDays(dateStr: string, days: number): string {
+  const d = parseDDMMYYYY(dateStr);
+  d.setUTCDate(d.getUTCDate() + days);
+  return fmtDate(d);
 }
 
 const ANOS_ENTRE_RETIROS = 5;
@@ -40,12 +51,6 @@ function isCurrentGap(fechaReingreso: string): boolean {
   return Math.abs(date.getTime() - now.getTime()) < 2 * MS_PER_DAY;
 }
 
-function addDays(dateStr: string, days: number): string {
-  const d = parseDDMMYYYY(dateStr);
-  d.setUTCDate(d.getUTCDate() + days);
-  return fmtDate(d);
-}
-
 export function RetirosDesempleo({
   retiros,
   semanasDescontadas,
@@ -53,8 +58,7 @@ export function RetirosDesempleo({
   semanasReconocidas,
 }: RetirosDesempleoProps) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [semanasInput, setSemanasInput] = useState<Record<number, number | undefined>>({});
-  const [montoInput, setMontoInput] = useState<Record<number, number | undefined>>({});
+  const [rowData, setRowData] = useState<Record<number, RowData>>({});
 
   const valorPorSemana =
     semanasReconocidas > 0 ? totalRCVBruto / semanasReconocidas : 0;
@@ -80,44 +84,31 @@ export function RetirosDesempleo({
     return disabled;
   }, [selected, fechasBaja, retiros.length]);
 
-  function getEffective(i: number) {
-    const semManual = semanasInput[i];
-    const monManual = montoInput[i];
-
-    let semanas = semManual ?? 0;
-    let monto = monManual ?? 0;
-
-    if (semManual !== undefined && monManual === undefined && valorPorSemana > 0) {
-      monto = Math.round(semManual * valorPorSemana * 100) / 100;
-    }
-    if (monManual !== undefined && semManual === undefined && valorPorSemana > 0) {
-      semanas = Math.round(monManual / valorPorSemana);
-    }
-
-    return { semanas, monto };
-  }
-
   const totales = useMemo(() => {
     let semanas = 0;
     let monto = 0;
     for (const idx of selected) {
-      const eff = getEffective(idx);
-      semanas += eff.semanas;
-      monto += eff.monto;
+      const data = rowData[idx];
+      if (data) {
+        semanas += data.semanas;
+        monto += data.monto;
+      }
     }
     return { semanas, monto };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, semanasInput, montoInput, valorPorSemana]);
+  }, [selected, rowData]);
 
-  const semanasRestantes = semanasDescontadas - totales.semanas;
+  const restantes = semanasDescontadas - totales.semanas;
 
   function toggleSelection(idx: number) {
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(idx)) {
         next.delete(idx);
-        setSemanasInput((p) => { const n = { ...p }; delete n[idx]; return n; });
-        setMontoInput((p) => { const n = { ...p }; delete n[idx]; return n; });
+        setRowData((prev) => {
+          const next = { ...prev };
+          delete next[idx];
+          return next;
+        });
       } else {
         next.add(idx);
       }
@@ -125,28 +116,33 @@ export function RetirosDesempleo({
     });
   }
 
-  function handleSemanasChange(idx: number, raw: string) {
-    if (raw === "") {
-      setSemanasInput((p) => { const n = { ...p }; n[idx] = undefined; return n; });
-    } else {
-      setSemanasInput((p) => ({ ...p, [idx]: Math.max(0, parseInt(raw) || 0) }));
-    }
-  }
+  const handleSemanasChange = useCallback(
+    (idx: number, value: string) => {
+      const semanas = Math.max(0, parseInt(value) || 0);
+      const monto = Math.round(semanas * valorPorSemana * 100) / 100;
+      setRowData((prev) => ({ ...prev, [idx]: { semanas, monto } }));
+    },
+    [valorPorSemana]
+  );
 
-  function handleMontoChange(idx: number, raw: string) {
-    if (raw === "") {
-      setMontoInput((p) => { const n = { ...p }; n[idx] = undefined; return n; });
-    } else {
-      setMontoInput((p) => ({ ...p, [idx]: Math.max(0, parseFloat(raw) || 0) }));
-    }
-  }
+  const handleMontoChange = useCallback(
+    (idx: number, value: string) => {
+      const monto = Math.max(0, parseFloat(value) || 0);
+      const semanas =
+        valorPorSemana > 0 ? Math.round(monto / valorPorSemana) : 0;
+      setRowData((prev) => ({ ...prev, [idx]: { semanas, monto } }));
+    },
+    [valorPorSemana]
+  );
 
   if (retiros.length === 0 && semanasDescontadas === 0) return null;
+
+  const totalRetiros = retiros.length;
 
   return (
     <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
       <div className="px-4 sm:px-5 py-3 sm:py-4 space-y-4">
-        {/* Alert */}
+        {/* Alert: semanas descontadas */}
         {semanasDescontadas > 0 && (
           <div className="flex items-center gap-2 rounded-lg bg-wv-red/10 border border-wv-red/20 px-3 py-2">
             <svg
@@ -167,40 +163,40 @@ export function RetirosDesempleo({
                 {semanasDescontadas} semanas descontadas
               </span>
               <span className="text-muted-foreground">
-                {" "}registradas en la constancia — selecciona e ingresa datos del estado de cuenta AFORE
+                {" "}registradas en la constancia
               </span>
             </p>
           </div>
         )}
 
-        {/* Table */}
+        {/* Eligible periods table */}
         {retiros.length > 0 ? (
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Empleos con más de 45 días sin volverse a emplear
+              Empleos en los que estuvo más de 45 días sin volverse a emplear
             </p>
             <div className="overflow-x-auto -mx-4 sm:-mx-5 px-4 sm:px-5">
               <table className="w-full text-xs sm:text-sm">
                 <thead>
                   <tr className="border-b border-wv-border text-left">
-                    <th className="pb-2 pr-1 text-center w-7"></th>
-                    <th className="pb-2 pr-2 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-center w-6">
+                    <th className="pb-2 pr-2 text-center w-8"></th>
+                    <th className="pb-2 pr-2 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-center w-8">
                       #
                     </th>
-                    <th className="pb-2 pr-2 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      Baja
+                    <th className="pb-2 pr-3 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Último día trabajado
                     </th>
-                    <th className="pb-2 pr-2 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    <th className="pb-2 pr-3 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       Fecha 46 días
                     </th>
-                    <th className="pb-2 pr-2 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    <th className="pb-2 pr-3 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       Reingreso
                     </th>
-                    <th className="pb-2 pr-2 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
-                      SBC
+                    <th className="pb-2 pr-3 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
+                      Último SBC
                     </th>
-                    <th className="pb-2 pr-2 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
-                      Sem. Desc.
+                    <th className="pb-2 pr-3 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
+                      Sem. desc.
                     </th>
                     <th className="pb-2 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
                       Monto
@@ -212,26 +208,20 @@ export function RetirosDesempleo({
                     const isSelected = selected.has(i);
                     const isDisabled = disabledIndices.has(i);
                     const isCurrent = isCurrentGap(r.fechaReingreso);
-                    const rowNum = retiros.length - i;
-
-                    const semManual = semanasInput[i];
-                    const monManual = montoInput[i];
-                    const eff = getEffective(i);
-                    const semDerived = semManual === undefined && monManual !== undefined;
-                    const monDerived = monManual === undefined && semManual !== undefined;
-
+                    const data = rowData[i];
+                    const num = totalRetiros - i;
                     return (
                       <tr
                         key={i}
                         className={`border-b border-wv-border/50 transition-colors ${
                           isDisabled
-                            ? "bg-wv-red/5 opacity-50"
+                            ? "opacity-40 bg-wv-red/5"
                             : isSelected
                               ? "bg-wv-cyan/5"
                               : "hover:bg-wv-hover"
                         }`}
                       >
-                        <td className="py-1.5 pr-1 text-center">
+                        <td className="py-2 pr-2 text-center">
                           <input
                             type="checkbox"
                             checked={isSelected}
@@ -240,46 +230,55 @@ export function RetirosDesempleo({
                             className="h-3.5 w-3.5 rounded border-wv-border text-wv-cyan focus:ring-wv-cyan focus:ring-offset-0 disabled:cursor-not-allowed"
                           />
                         </td>
-                        <td className="py-1.5 pr-2 text-center text-muted-foreground">
-                          {rowNum}
+                        <td className="py-2 pr-2 text-center text-muted-foreground font-mono">
+                          {num}
                         </td>
-                        <td className="py-1.5 pr-2 font-mono">{r.fechaBaja}</td>
-                        <td className="py-1.5 pr-2 font-mono text-muted-foreground">
+                        <td className="py-2 pr-3 font-mono">{r.fechaBaja}</td>
+                        <td className="py-2 pr-3 font-mono text-muted-foreground">
                           {addDays(r.fechaBaja, 46)}
                         </td>
-                        <td className="py-1.5 pr-2 font-mono">
-                          {isCurrent
-                            ? <span className="text-wv-cyan italic">Actual</span>
-                            : r.fechaReingreso}
+                        <td className="py-2 pr-3 font-mono">
+                          {isCurrent ? (
+                            <span className="text-wv-cyan italic">Actual</span>
+                          ) : (
+                            r.fechaReingreso
+                          )}
                         </td>
-                        <td className="py-1.5 pr-2 text-right font-mono text-muted-foreground">
+                        <td className="py-2 pr-3 text-right font-mono">
                           {formatMXN(r.salarioDiario)}
                         </td>
-                        <td className="py-1.5 pr-2 text-right">
+                        <td className="py-2 pr-3 text-right">
                           {isSelected ? (
                             <input
                               type="number"
                               min={0}
-                              value={semManual !== undefined ? semManual : (semDerived ? eff.semanas : "")}
-                              onChange={(e) => handleSemanasChange(i, e.target.value)}
+                              value={data?.semanas || ""}
+                              onChange={(e) =>
+                                handleSemanasChange(i, e.target.value)
+                              }
                               placeholder="0"
-                              className={`w-16 rounded border border-wv-border bg-background px-1.5 py-0.5 text-xs sm:text-sm font-mono text-right focus:outline-none focus:ring-1 focus:ring-wv-cyan focus:border-transparent ${semDerived ? "text-wv-cyan/70 italic" : ""}`}
+                              className="w-16 rounded border border-wv-border bg-background px-1.5 py-0.5 text-xs font-mono text-right focus:outline-none focus:ring-1 focus:ring-wv-cyan focus:border-transparent"
                             />
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
                         </td>
-                        <td className="py-1.5 text-right">
+                        <td className="py-2 text-right">
                           {isSelected ? (
                             <div className="relative">
-                              <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">$</span>
+                              <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">
+                                $
+                              </span>
                               <input
                                 type="number"
                                 min={0}
-                                value={monManual !== undefined ? monManual : (monDerived ? eff.monto : "")}
-                                onChange={(e) => handleMontoChange(i, e.target.value)}
+                                step={0.01}
+                                value={data?.monto || ""}
+                                onChange={(e) =>
+                                  handleMontoChange(i, e.target.value)
+                                }
                                 placeholder="0"
-                                className={`w-24 rounded border border-wv-border bg-background pl-4 pr-1.5 py-0.5 text-xs sm:text-sm font-mono text-right focus:outline-none focus:ring-1 focus:ring-wv-cyan focus:border-transparent ${monDerived ? "text-wv-cyan/70 italic" : ""}`}
+                                className="w-24 rounded border border-wv-border bg-background pl-4 pr-1.5 py-0.5 text-xs font-mono text-right focus:outline-none focus:ring-1 focus:ring-wv-cyan focus:border-transparent"
                               />
                             </div>
                           ) : (
@@ -293,21 +292,21 @@ export function RetirosDesempleo({
               </table>
             </div>
 
-            {/* Summary */}
-            {selected.size > 0 && (
-              <div className="rounded-lg border border-wv-border bg-muted/40 p-3 space-y-2.5">
+            {/* VPS reference */}
+            {valorPorSemana > 0 && (
+              <p className="text-[10px] sm:text-[11px] text-muted-foreground font-mono">
+                Valor por semana estimado: {formatMXN(valorPorSemana)} (RCV
+                bruto {formatMXN(totalRCVBruto)} ÷ {semanasReconocidas} sem.)
+              </p>
+            )}
+
+            {/* Summary footer */}
+            {selected.size > 0 && totales.semanas > 0 && (
+              <div className="rounded-lg border border-wv-border bg-muted/40 p-3 space-y-2">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
                   <div>
                     <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-                      Monto a devolver
-                    </p>
-                    <p className="text-sm sm:text-base font-bold font-mono mt-0.5 text-wv-red">
-                      {totales.monto > 0 ? formatMXN(totales.monto) : "—"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-                      Sem. ingresadas
+                      Sem. asignadas
                     </p>
                     <p className="text-sm sm:text-base font-bold font-mono mt-0.5">
                       {totales.semanas}
@@ -315,7 +314,7 @@ export function RetirosDesempleo({
                   </div>
                   <div>
                     <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-                      Sem. constancia
+                      Constancia
                     </p>
                     <p className="text-sm sm:text-base font-bold font-mono mt-0.5">
                       {semanasDescontadas}
@@ -325,32 +324,51 @@ export function RetirosDesempleo({
                     <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
                       Restantes
                     </p>
-                    <p className={`text-sm sm:text-base font-bold font-mono mt-0.5 ${
-                      semanasRestantes === 0
-                        ? "text-wv-green"
-                        : semanasRestantes < 0
-                          ? "text-wv-red"
-                          : ""
-                    }`}>
-                      {semanasRestantes}
-                      {semanasRestantes === 0 && (
-                        <span className="ml-1.5 text-[10px] font-semibold text-wv-green">Cuadra</span>
-                      )}
+                    <p
+                      className={`text-sm sm:text-base font-bold font-mono mt-0.5 ${
+                        restantes === 0
+                          ? "text-wv-green"
+                          : restantes > 0
+                            ? "text-wv-red"
+                            : "text-wv-cyan"
+                      }`}
+                    >
+                      {restantes}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                      Total a devolver
+                    </p>
+                    <p className="text-sm sm:text-base font-bold font-mono mt-0.5 text-wv-red">
+                      {formatMXN(totales.monto)}
                     </p>
                   </div>
                 </div>
-                {valorPorSemana > 0 && (
-                  <p className="text-[10px] sm:text-[11px] text-muted-foreground italic">
-                    Valores en itálica son estimados: valor por semana ≈ {formatMXN(valorPorSemana)} (RCV bruto ÷ sem. reconocidas)
-                  </p>
+
+                {restantes === 0 && (
+                  <div className="rounded-lg bg-wv-green/10 border border-wv-green/20 px-3 py-1.5">
+                    <p className="text-xs sm:text-sm font-semibold text-wv-green">
+                      Semanas descontadas cuadran con la constancia
+                    </p>
+                  </div>
+                )}
+                {restantes < 0 && (
+                  <div className="rounded-lg bg-wv-cyan/10 border border-wv-cyan/20 px-3 py-1.5">
+                    <p className="text-xs sm:text-sm text-wv-cyan">
+                      Semanas asignadas exceden la constancia por{" "}
+                      {Math.abs(restantes)} — verificar datos
+                    </p>
+                  </div>
                 )}
               </div>
             )}
           </div>
         ) : semanasDescontadas > 0 ? (
           <p className="text-xs sm:text-sm text-muted-foreground">
-            No se detectaron periodos de desempleo (&ge;46 días, post-1997) en el
-            historial laboral, pero la constancia registra semanas descontadas.
+            No se detectaron periodos de desempleo (&ge;46 días, post-1997) en
+            el historial laboral, pero la constancia registra semanas
+            descontadas.
           </p>
         ) : null}
 
@@ -359,11 +377,34 @@ export function RetirosDesempleo({
           <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Referencia — Art. 191 y 198 LSS
           </p>
-          <div className="text-[10px] sm:text-[11px] text-muted-foreground space-y-0.5">
-            <p><span className="font-medium text-foreground/70">Elegibilidad:</span> 46+ días sin empleo, mín. 5 años entre retiros</p>
-            <p><span className="font-medium text-foreground/70">Mod. A:</span> 30 días × último SBC (tope 10× UMA). <span className="font-medium text-foreground/70">Mod. B:</span> menor entre 90d × SBC prom. 250 sem. y 11.5% RCV</p>
-            <p><span className="font-medium text-foreground/70">Reintegro:</span> monto nominal, sin intereses. Parcial o total, sin plazo límite</p>
-            <p><span className="font-medium text-foreground/70">Sem. recuperadas:</span> sem. descontadas × (monto reintegrado ÷ monto retirado)</p>
+          <div className="text-[10px] sm:text-[11px] text-muted-foreground space-y-1">
+            <p>
+              <span className="font-medium text-foreground/70">
+                Elegibilidad:
+              </span>{" "}
+              46+ días sin empleo, mín. 5 años entre retiros
+            </p>
+            <p>
+              <span className="font-medium text-foreground/70">Mod. A:</span>{" "}
+              30 días × último SBC (tope: 10× UMA mensual)
+            </p>
+            <p>
+              <span className="font-medium text-foreground/70">Mod. B:</span>{" "}
+              menor entre 90 días × SBC prom. 250 sem. y 11.5% del saldo RCV
+            </p>
+            <p>
+              <span className="font-medium text-foreground/70">
+                Sem. desc.:
+              </span>{" "}
+              monto retirado ÷ (saldo RCV ÷ sem. cotizadas) al momento del
+              retiro
+            </p>
+            <p>
+              <span className="font-medium text-foreground/70">
+                Reintegro:
+              </span>{" "}
+              mismo monto nominal, sin intereses. Parcial o total. Sin plazo.
+            </p>
           </div>
         </div>
       </div>
