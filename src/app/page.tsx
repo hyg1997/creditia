@@ -52,6 +52,54 @@ function getCostoAnualPorSemanas(semanas: number): number {
 const LIMITE_MOD10_DIAS = 4 * 365 + 11 * 30 + 22;
 const LIMITE_MOD40_DIAS = 11 * 30 + 12;
 
+const RANGOS_SEMANAS = [
+  { semanas: 900, label: "Hasta 60 años 6 meses 0 días" },
+  { semanas: 870, label: "60 años 6 meses 1 día a 61 años 6 meses 0 días" },
+  { semanas: 840, label: "61 años 6 meses 1 día a 62 años 6 meses 0 días" },
+  { semanas: 810, label: "62 años 6 meses 1 día a 63 años 6 meses 0 días" },
+  { semanas: 780, label: "63 años 6 meses 1 día a 64 años 6 meses 0 días" },
+  { semanas: 750, label: "Más de 64 años 6 meses 1 día" },
+];
+
+function getSemanasMinByEdad(fechaNac: Date | null): { minSemanas: number; rangoIndex: number } {
+  if (!fechaNac) return { minSemanas: 900, rangoIndex: 0 };
+  const hoy = new Date();
+  const thresholds = [
+    { anos: 64, meses: 6, idx: 5 },
+    { anos: 63, meses: 6, idx: 4 },
+    { anos: 62, meses: 6, idx: 3 },
+    { anos: 61, meses: 6, idx: 2 },
+    { anos: 60, meses: 6, idx: 1 },
+  ];
+  for (const t of thresholds) {
+    const threshold = new Date(Date.UTC(
+      fechaNac.getUTCFullYear() + t.anos,
+      fechaNac.getUTCMonth() + t.meses,
+      fechaNac.getUTCDate() + 1,
+    ));
+    if (hoy.getTime() >= threshold.getTime()) {
+      return { minSemanas: RANGOS_SEMANAS[t.idx].semanas, rangoIndex: t.idx };
+    }
+  }
+  return { minSemanas: 900, rangoIndex: 0 };
+}
+
+function calcEdadExacta(fechaNac: Date): { anos: number; meses: number; dias: number } {
+  const hoy = new Date();
+  let anos = hoy.getUTCFullYear() - fechaNac.getUTCFullYear();
+  let meses = hoy.getUTCMonth() - fechaNac.getUTCMonth();
+  let dias = hoy.getUTCDate() - fechaNac.getUTCDate();
+  if (dias < 0) {
+    meses--;
+    dias += new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), 0)).getUTCDate();
+  }
+  if (meses < 0) {
+    anos--;
+    meses += 12;
+  }
+  return { anos, meses, dias };
+}
+
 function calcEdadFromCURP(
   curp: string,
 ): { edad: number; fechaNacimiento: Date } | null {
@@ -319,10 +367,14 @@ export default function Home() {
   }, []);
 
   const isLey73 = result?.regimen === "ley73";
+  const edadInfo = result ? calcEdadFromCURP(result.header.curp) : null;
+  const edad = edadInfo?.edad ?? 0;
+  const edadExacta = edadInfo?.fechaNacimiento ? calcEdadExacta(edadInfo.fechaNacimiento) : null;
   const semanasTotales = result
     ? result.header.totalSemanasCotizadas + result.header.semanasReintegradas
     : 0;
-  const cumpleSemanas = semanasTotales >= 900;
+  const { minSemanas: semanasMinimas, rangoIndex: semanasRangoIndex } = getSemanasMinByEdad(edadInfo?.fechaNacimiento ?? null);
+  const cumpleSemanas = semanasTotales >= semanasMinimas;
   const viviendaBruta = result ? result.afore.totalVivienda : 0;
   const descuentoCredito = tieneCredito ? Math.min(montoCredito, viviendaBruta) : 0;
   const viviendaAjustada = viviendaBruta - descuentoCredito;
@@ -359,8 +411,6 @@ export default function Home() {
 
   const mod40Cumple = diasSinCotizar <= LIMITE_MOD40_DIAS;
 
-  const edadInfo = result ? calcEdadFromCURP(result.header.curp) : null;
-  const edad = edadInfo?.edad ?? 0;
   const mesesSinCotizar = sinTrabajar
     ? sinTrabajar.anos * 12 + sinTrabajar.meses
     : 0;
@@ -652,42 +702,76 @@ export default function Home() {
               </div>
 
               <div className="space-y-2 sm:space-y-2.5">
-                {/* Ley 73 + Semanas */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5">
-                  <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-                    <div
-                      className={`border-l-4 ${isLey73 ? "border-l-wv-green" : "border-l-wv-red"} px-3.5 sm:px-5 py-2.5 sm:py-3`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="font-medium text-xs sm:text-sm">
-                            Régimen Ley 73
-                          </p>
-                          <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 leading-tight">
-                            {isLey73
-                              ? `Primera cotización: ${primeraCotizacion ? primeraCotizacion.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }) : "Antes del 1 julio 1997"}`
-                              : "Después del 1 de julio de 1997"}
-                          </p>
-                        </div>
-                        <StatusBadge pass={isLey73} />
+                {/* Ley 73 */}
+                <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
+                  <div className={`border-l-4 ${isLey73 ? "border-l-wv-green" : "border-l-wv-red"} px-3.5 sm:px-5 py-2.5 sm:py-3`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-medium text-xs sm:text-sm">Régimen Ley 73</p>
+                        <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 leading-tight">
+                          {isLey73
+                            ? <>Primera alta antes del 1 julio 1997{primeraCotizacion && <> — {primeraCotizacion.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}</>}</>
+                            : "Primera alta después del 1 de julio de 1997"}
+                        </p>
                       </div>
+                      <StatusBadge pass={isLey73} />
                     </div>
                   </div>
+                </div>
 
-                  <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-                    <div
-                      className={`border-l-4 ${cumpleSemanas ? "border-l-wv-green" : "border-l-wv-red"} px-3.5 sm:px-5 py-2.5 sm:py-3`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="font-medium text-xs sm:text-sm">
-                            Semanas Cotizadas
-                          </p>
-                          <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 leading-tight">
-                            {semanasTotales} semanas. Mínimo: 900
-                          </p>
-                        </div>
-                        <StatusBadge pass={cumpleSemanas} />
+                {/* Semanas Cotizadas — age-based ranges */}
+                <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
+                  <div className={`border-l-4 ${cumpleSemanas ? "border-l-wv-green" : "border-l-wv-red"} px-3.5 sm:px-4 py-2.5 sm:py-3 space-y-2 sm:space-y-2.5`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-medium text-xs sm:text-sm">Semanas Cotizadas</p>
+                        <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 leading-tight">
+                          {semanasTotales} semanas — Mínimo requerido: {semanasMinimas}
+                          {edadExacta && <> (edad: {edadExacta.anos}a {edadExacta.meses}m {edadExacta.dias}d)</>}
+                        </p>
+                      </div>
+                      <StatusBadge pass={cumpleSemanas} />
+                    </div>
+
+                    <div className="rounded-lg border border-wv-border overflow-hidden">
+                      <table className="w-full text-[10px] sm:text-xs">
+                        <thead>
+                          <tr className="bg-muted/40">
+                            <th className="px-2.5 sm:px-3 py-1.5 text-left font-medium text-muted-foreground w-16">Sem.</th>
+                            <th className="px-2.5 sm:px-3 py-1.5 text-left font-medium text-muted-foreground">Edad</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {RANGOS_SEMANAS.map((r, i) => {
+                            const isActive = i === semanasRangoIndex;
+                            return (
+                              <tr
+                                key={i}
+                                className={isActive
+                                  ? "bg-wv-cyan/10 font-semibold"
+                                  : "border-t border-wv-border/50"}
+                              >
+                                <td className={`px-2.5 sm:px-3 py-1 font-mono ${isActive ? "text-wv-cyan" : ""}`}>{r.semanas}</td>
+                                <td className={`px-2.5 sm:px-3 py-1 ${isActive ? "text-wv-cyan" : "text-muted-foreground"}`}>{r.label}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+                      <div className="bg-muted/60 rounded-lg p-2">
+                        <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Cotizadas</p>
+                        <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{result.header.totalSemanasCotizadas}</p>
+                      </div>
+                      <div className="bg-muted/60 rounded-lg p-2">
+                        <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Descontadas</p>
+                        <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5 text-wv-red">{result.header.semanasDescontadas}</p>
+                      </div>
+                      <div className="bg-muted/60 rounded-lg p-2">
+                        <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Reintegradas</p>
+                        <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5 text-wv-green">{result.header.semanasReintegradas}</p>
                       </div>
                     </div>
                   </div>
