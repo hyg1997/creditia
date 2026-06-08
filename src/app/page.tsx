@@ -216,6 +216,8 @@ interface ApiRetiroParcial {
   salarioDiario: number;
   montoRetiro: number;
   topeAplicado: boolean;
+  umaDiario: number;
+  topeMensual: number;
 }
 
 interface ApiResult {

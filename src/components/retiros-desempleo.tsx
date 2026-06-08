@@ -10,6 +10,8 @@ interface RetiroParcial {
   salarioDiario: number;
   montoRetiro: number;
   topeAplicado: boolean;
+  umaDiario: number;
+  topeMensual: number;
 }
 
 interface RetirosDesempleoProps {
@@ -154,12 +156,19 @@ export function RetirosDesempleo({
   const handleMontoChange = useCallback(
     (idx: number, value: string) => {
       const maxMonto = retiros[idx].montoRetiro;
+      const maxSemanas = Math.max(0, semanasDescontadas - semanasUsadasPorOtros(idx));
       const monto = Math.min(Math.max(0, parseFloat(value) || 0), maxMonto);
       const vps = getVPS(idx);
-      const semanas = vps > 0 ? Math.round(monto / vps) : 0;
-      setRowData((prev) => ({ ...prev, [idx]: { semanas, monto } }));
+      let semanas = vps > 0 ? Math.round(monto / vps) : 0;
+      if (semanas > maxSemanas) {
+        semanas = maxSemanas;
+        const montoAjustado = Math.round(semanas * vps * 100) / 100;
+        setRowData((prev) => ({ ...prev, [idx]: { semanas, monto: montoAjustado } }));
+      } else {
+        setRowData((prev) => ({ ...prev, [idx]: { semanas, monto } }));
+      }
     },
-    [getVPS, retiros]
+    [getVPS, retiros, semanasDescontadas, semanasUsadasPorOtros]
   );
 
   if (retiros.length === 0 && semanasDescontadas === 0) return null;
@@ -223,6 +232,15 @@ export function RetirosDesempleo({
                       Último SBC
                     </th>
                     <th className="pb-2 pr-3 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
+                      UMA
+                    </th>
+                    <th className="pb-2 pr-3 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
+                      Tope Mod.A
+                    </th>
+                    <th className="pb-2 pr-3 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
+                      VPS
+                    </th>
+                    <th className="pb-2 pr-3 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
                       Sem. desc.
                     </th>
                     <th className="pb-2 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
@@ -277,6 +295,15 @@ export function RetirosDesempleo({
                         <td className="py-2 pr-3 text-right font-mono">
                           {formatMXN(r.salarioDiario)}
                         </td>
+                        <td className="py-2 pr-3 text-right font-mono text-muted-foreground">
+                          {formatMXN(r.umaDiario)}
+                        </td>
+                        <td className="py-2 pr-3 text-right font-mono text-muted-foreground">
+                          {formatMXN(r.topeMensual)}
+                        </td>
+                        <td className="py-2 pr-3 text-right font-mono text-muted-foreground">
+                          {formatMXN(getVPS(i))}
+                        </td>
                         <td className="py-2 pr-3 text-right">
                           {isSelected ? (
                             <input
@@ -324,12 +351,28 @@ export function RetirosDesempleo({
               </table>
             </div>
 
-            {/* VPS reference */}
+            {/* Reference values */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
+              <div className="bg-muted/60 rounded-lg p-2">
+                <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Saldo RCV bruto</p>
+                <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{formatMXN(totalRCVBruto)}</p>
+              </div>
+              <div className="bg-muted/60 rounded-lg p-2">
+                <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Sem. reconocidas</p>
+                <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{semanasReconocidas}</p>
+              </div>
+              <div className="bg-muted/60 rounded-lg p-2">
+                <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">VPS base</p>
+                <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{vpsBase > 0 ? formatMXN(vpsBase) : "—"}</p>
+              </div>
+              <div className="bg-muted/60 rounded-lg p-2">
+                <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">SBC promedio</p>
+                <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{avgSBC > 0 ? formatMXN(avgSBC) : "—"}</p>
+              </div>
+            </div>
             {vpsBase > 0 && (
-              <p className="text-[10px] sm:text-[11px] text-muted-foreground font-mono">
-                VPS base: {formatMXN(vpsBase)} (RCV bruto{" "}
-                {formatMXN(totalRCVBruto)} ÷ {semanasReconocidas} sem.) —
-                ajustado por SBC de cada periodo
+              <p className="text-[10px] sm:text-[11px] text-muted-foreground">
+                VPS = RCV bruto ÷ sem. reconocidas, ajustado por SBC de cada periodo (VPS × SBC<sub>i</sub> / SBC<sub>prom</sub>)
               </p>
             )}
 

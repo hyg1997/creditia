@@ -113,6 +113,8 @@ export interface RetiroParcial {
   salarioDiario: number;
   montoRetiro: number;
   topeAplicado: boolean;
+  umaDiario: number;
+  topeMensual: number;
 }
 
 export interface RetirosDesempleoResult {

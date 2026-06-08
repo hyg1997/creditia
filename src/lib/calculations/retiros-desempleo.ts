@@ -104,10 +104,11 @@ function buildRetiro(
   if (baja.getTime() < LEY97_INICIO) return null;
 
   const year = baja.getUTCFullYear();
-  const tope = topeUMAMensual(year);
+  const umaDiario = getUMA(year);
+  const topeMensual = 10 * umaDiario * 30.4;
   const montoCalculado = DIAS_RETIRO * salario;
-  const topeAplicado = montoCalculado > tope;
-  const montoRetiro = Math.min(montoCalculado, tope);
+  const topeAplicado = montoCalculado > topeMensual;
+  const montoRetiro = Math.min(montoCalculado, topeMensual);
 
   return {
     fechaBaja: baja,
@@ -116,6 +117,8 @@ function buildRetiro(
     salarioDiario: salario,
     montoRetiro,
     topeAplicado,
+    umaDiario,
+    topeMensual,
   };
 }
 
