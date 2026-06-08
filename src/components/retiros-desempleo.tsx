@@ -116,23 +116,45 @@ export function RetirosDesempleo({
     });
   }
 
+  const semanasUsadasPorOtros = useCallback(
+    (idx: number) => {
+      let sum = 0;
+      for (const [k, v] of Object.entries(rowData)) {
+        if (Number(k) !== idx) sum += v.semanas;
+      }
+      return sum;
+    },
+    [rowData]
+  );
+
   const handleSemanasChange = useCallback(
     (idx: number, value: string) => {
-      const semanas = Math.max(0, parseInt(value) || 0);
+      const maxPorMonto = valorPorSemana > 0
+        ? Math.round(retiros[idx].montoRetiro / valorPorSemana)
+        : Infinity;
+      const maxPorTotal = semanasDescontadas - semanasUsadasPorOtros(idx);
+      const maxSemanas = Math.max(0, Math.min(maxPorMonto, maxPorTotal));
+
+      const semanas = Math.min(Math.max(0, parseInt(value) || 0), maxSemanas);
       const monto = Math.round(semanas * valorPorSemana * 100) / 100;
       setRowData((prev) => ({ ...prev, [idx]: { semanas, monto } }));
     },
-    [valorPorSemana]
+    [valorPorSemana, retiros, semanasDescontadas, semanasUsadasPorOtros]
   );
 
   const handleMontoChange = useCallback(
     (idx: number, value: string) => {
-      const monto = Math.max(0, parseFloat(value) || 0);
+      const maxMonto = retiros[idx].montoRetiro;
+      const maxPorTotal = semanasDescontadas - semanasUsadasPorOtros(idx);
+      const maxMontoPorSemanas = maxPorTotal * valorPorSemana;
+      const topeMonto = Math.max(0, Math.min(maxMonto, maxMontoPorSemanas));
+
+      const monto = Math.min(Math.max(0, parseFloat(value) || 0), topeMonto);
       const semanas =
         valorPorSemana > 0 ? Math.round(monto / valorPorSemana) : 0;
       setRowData((prev) => ({ ...prev, [idx]: { semanas, monto } }));
     },
-    [valorPorSemana]
+    [valorPorSemana, retiros, semanasDescontadas, semanasUsadasPorOtros]
   );
 
   if (retiros.length === 0 && semanasDescontadas === 0) return null;
@@ -210,6 +232,12 @@ export function RetirosDesempleo({
                     const isCurrent = isCurrentGap(r.fechaReingreso);
                     const data = rowData[i];
                     const num = totalRetiros - i;
+                    const maxSemRow = valorPorSemana > 0
+                      ? Math.round(r.montoRetiro / valorPorSemana)
+                      : 0;
+                    const disponibles = semanasDescontadas - semanasUsadasPorOtros(i);
+                    const maxSem = Math.max(0, Math.min(maxSemRow, disponibles));
+                    const maxMonto = Math.round(Math.min(r.montoRetiro, disponibles * valorPorSemana) * 100) / 100;
                     return (
                       <tr
                         key={i}
@@ -252,12 +280,13 @@ export function RetirosDesempleo({
                             <input
                               type="number"
                               min={0}
+                              max={maxSem}
                               value={data?.semanas || ""}
                               onChange={(e) =>
                                 handleSemanasChange(i, e.target.value)
                               }
-                              placeholder="0"
-                              className="w-16 rounded border border-wv-border bg-background px-1.5 py-0.5 text-xs font-mono text-right focus:outline-none focus:ring-1 focus:ring-wv-cyan focus:border-transparent"
+                              placeholder={`máx ${maxSem}`}
+                              className="w-20 rounded border border-wv-border bg-background px-1.5 py-0.5 text-xs font-mono text-right focus:outline-none focus:ring-1 focus:ring-wv-cyan focus:border-transparent placeholder:text-muted-foreground/50"
                             />
                           ) : (
                             <span className="text-muted-foreground">—</span>
@@ -272,13 +301,14 @@ export function RetirosDesempleo({
                               <input
                                 type="number"
                                 min={0}
+                                max={maxMonto}
                                 step={0.01}
                                 value={data?.monto || ""}
                                 onChange={(e) =>
                                   handleMontoChange(i, e.target.value)
                                 }
-                                placeholder="0"
-                                className="w-24 rounded border border-wv-border bg-background pl-4 pr-1.5 py-0.5 text-xs font-mono text-right focus:outline-none focus:ring-1 focus:ring-wv-cyan focus:border-transparent"
+                                placeholder={`máx ${Math.round(maxMonto).toLocaleString()}`}
+                                className="w-28 rounded border border-wv-border bg-background pl-4 pr-1.5 py-0.5 text-xs font-mono text-right focus:outline-none focus:ring-1 focus:ring-wv-cyan focus:border-transparent placeholder:text-muted-foreground/50"
                               />
                             </div>
                           ) : (
