@@ -142,33 +142,37 @@ export function RetirosDesempleo({
     [rowData]
   );
 
+  const getEffectiveMax = useCallback(
+    (idx: number) => {
+      const semConstancia = Math.max(0, semanasDescontadas - semanasUsadasPorOtros(idx));
+      const montoRetiro = retiros[idx].montoRetiro;
+      const vps = getVPS(idx);
+      const semPorMonto = vps > 0 ? Math.floor(montoRetiro / vps) : semConstancia;
+      const maxSem = Math.min(semConstancia, semPorMonto);
+      const maxMonto = Math.min(montoRetiro, Math.round(semConstancia * vps * 100) / 100);
+      return { maxSem, maxMonto, vps };
+    },
+    [semanasDescontadas, semanasUsadasPorOtros, retiros, getVPS]
+  );
+
   const handleSemanasChange = useCallback(
     (idx: number, value: string) => {
-      const maxSemanas = Math.max(0, semanasDescontadas - semanasUsadasPorOtros(idx));
-      const semanas = Math.min(Math.max(0, parseInt(value) || 0), maxSemanas);
-      const vps = getVPS(idx);
+      const { maxSem, vps } = getEffectiveMax(idx);
+      const semanas = Math.min(Math.max(0, parseInt(value) || 0), maxSem);
       const monto = Math.round(semanas * vps * 100) / 100;
       setRowData((prev) => ({ ...prev, [idx]: { semanas, monto } }));
     },
-    [getVPS, semanasDescontadas, semanasUsadasPorOtros]
+    [getEffectiveMax]
   );
 
   const handleMontoChange = useCallback(
     (idx: number, value: string) => {
-      const maxMonto = retiros[idx].montoRetiro;
-      const maxSemanas = Math.max(0, semanasDescontadas - semanasUsadasPorOtros(idx));
+      const { maxMonto, vps } = getEffectiveMax(idx);
       const monto = Math.min(Math.max(0, parseFloat(value) || 0), maxMonto);
-      const vps = getVPS(idx);
-      let semanas = vps > 0 ? Math.round(monto / vps) : 0;
-      if (semanas > maxSemanas) {
-        semanas = maxSemanas;
-        const montoAjustado = Math.round(semanas * vps * 100) / 100;
-        setRowData((prev) => ({ ...prev, [idx]: { semanas, monto: montoAjustado } }));
-      } else {
-        setRowData((prev) => ({ ...prev, [idx]: { semanas, monto } }));
-      }
+      const semanas = vps > 0 ? Math.round(monto / vps) : 0;
+      setRowData((prev) => ({ ...prev, [idx]: { semanas, monto } }));
     },
-    [getVPS, retiros, semanasDescontadas, semanasUsadasPorOtros]
+    [getEffectiveMax]
   );
 
   if (retiros.length === 0 && semanasDescontadas === 0) return null;
@@ -255,9 +259,7 @@ export function RetirosDesempleo({
                     const isCurrent = isCurrentGap(r.fechaReingreso);
                     const data = rowData[i];
                     const num = totalRetiros - i;
-                    const disponibles = semanasDescontadas - semanasUsadasPorOtros(i);
-                    const maxSem = Math.max(0, disponibles);
-                    const maxMonto = r.montoRetiro;
+                    const { maxSem, maxMonto } = getEffectiveMax(i);
                     return (
                       <tr
                         key={i}
