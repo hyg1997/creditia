@@ -129,32 +129,23 @@ export function RetirosDesempleo({
 
   const handleSemanasChange = useCallback(
     (idx: number, value: string) => {
-      const maxPorMonto = valorPorSemana > 0
-        ? Math.round(retiros[idx].montoRetiro / valorPorSemana)
-        : Infinity;
-      const maxPorTotal = semanasDescontadas - semanasUsadasPorOtros(idx);
-      const maxSemanas = Math.max(0, Math.min(maxPorMonto, maxPorTotal));
-
+      const maxSemanas = Math.max(0, semanasDescontadas - semanasUsadasPorOtros(idx));
       const semanas = Math.min(Math.max(0, parseInt(value) || 0), maxSemanas);
       const monto = Math.round(semanas * valorPorSemana * 100) / 100;
       setRowData((prev) => ({ ...prev, [idx]: { semanas, monto } }));
     },
-    [valorPorSemana, retiros, semanasDescontadas, semanasUsadasPorOtros]
+    [valorPorSemana, semanasDescontadas, semanasUsadasPorOtros]
   );
 
   const handleMontoChange = useCallback(
     (idx: number, value: string) => {
       const maxMonto = retiros[idx].montoRetiro;
-      const maxPorTotal = semanasDescontadas - semanasUsadasPorOtros(idx);
-      const maxMontoPorSemanas = maxPorTotal * valorPorSemana;
-      const topeMonto = Math.max(0, Math.min(maxMonto, maxMontoPorSemanas));
-
-      const monto = Math.min(Math.max(0, parseFloat(value) || 0), topeMonto);
+      const monto = Math.min(Math.max(0, parseFloat(value) || 0), maxMonto);
       const semanas =
         valorPorSemana > 0 ? Math.round(monto / valorPorSemana) : 0;
       setRowData((prev) => ({ ...prev, [idx]: { semanas, monto } }));
     },
-    [valorPorSemana, retiros, semanasDescontadas, semanasUsadasPorOtros]
+    [valorPorSemana, retiros]
   );
 
   if (retiros.length === 0 && semanasDescontadas === 0) return null;
@@ -232,12 +223,9 @@ export function RetirosDesempleo({
                     const isCurrent = isCurrentGap(r.fechaReingreso);
                     const data = rowData[i];
                     const num = totalRetiros - i;
-                    const maxSemRow = valorPorSemana > 0
-                      ? Math.round(r.montoRetiro / valorPorSemana)
-                      : 0;
                     const disponibles = semanasDescontadas - semanasUsadasPorOtros(i);
-                    const maxSem = Math.max(0, Math.min(maxSemRow, disponibles));
-                    const maxMonto = Math.round(Math.min(r.montoRetiro, disponibles * valorPorSemana) * 100) / 100;
+                    const maxSem = Math.max(0, disponibles);
+                    const maxMonto = r.montoRetiro;
                     return (
                       <tr
                         key={i}
