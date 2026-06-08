@@ -4,7 +4,28 @@ const DIAS_MINIMOS_DESEMPLEO = 46;
 const DIAS_RETIRO = 30;
 const LEY97_INICIO = Date.UTC(1997, 6, 1); // July 1, 1997
 
+// SMG diario Zona A (1997–2016), UMA diario (2017+)
 const UMA_DIARIO_POR_AÑO: Record<number, number> = {
+  1997: 26.45,
+  1998: 30.20,
+  1999: 34.45,
+  2000: 37.90,
+  2001: 40.35,
+  2002: 42.15,
+  2003: 43.65,
+  2004: 45.24,
+  2005: 46.80,
+  2006: 48.67,
+  2007: 50.57,
+  2008: 52.59,
+  2009: 54.80,
+  2010: 57.46,
+  2011: 59.82,
+  2012: 62.33,
+  2013: 64.76,
+  2014: 67.29,
+  2015: 70.10,
+  2016: 73.04,
   2017: 75.49,
   2018: 80.60,
   2019: 84.49,
@@ -19,8 +40,8 @@ const UMA_DIARIO_POR_AÑO: Record<number, number> = {
 
 function getUMA(year: number): number {
   if (year in UMA_DIARIO_POR_AÑO) return UMA_DIARIO_POR_AÑO[year];
-  if (year < 2017) return 75.49;
-  return UMA_DIARIO_POR_AÑO[2026] ?? 117.65;
+  if (year < 1997) return UMA_DIARIO_POR_AÑO[1997];
+  return UMA_DIARIO_POR_AÑO[2026];
 }
 
 function topeUMAMensual(year: number): number {

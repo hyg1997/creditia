@@ -60,8 +60,21 @@ export function RetirosDesempleo({
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [rowData, setRowData] = useState<Record<number, RowData>>({});
 
-  const valorPorSemana =
+  const vpsBase =
     semanasReconocidas > 0 ? totalRCVBruto / semanasReconocidas : 0;
+
+  const avgSBC = useMemo(() => {
+    if (retiros.length === 0) return 0;
+    return retiros.reduce((sum, r) => sum + r.salarioDiario, 0) / retiros.length;
+  }, [retiros]);
+
+  const getVPS = useCallback(
+    (idx: number) => {
+      if (avgSBC === 0 || vpsBase === 0) return vpsBase;
+      return vpsBase * (retiros[idx].salarioDiario / avgSBC);
+    },
+    [vpsBase, avgSBC, retiros]
+  );
 
   const fechasBaja = useMemo(
     () => retiros.map((r) => parseDDMMYYYY(r.fechaBaja).getTime()),
@@ -131,21 +144,22 @@ export function RetirosDesempleo({
     (idx: number, value: string) => {
       const maxSemanas = Math.max(0, semanasDescontadas - semanasUsadasPorOtros(idx));
       const semanas = Math.min(Math.max(0, parseInt(value) || 0), maxSemanas);
-      const monto = Math.round(semanas * valorPorSemana * 100) / 100;
+      const vps = getVPS(idx);
+      const monto = Math.round(semanas * vps * 100) / 100;
       setRowData((prev) => ({ ...prev, [idx]: { semanas, monto } }));
     },
-    [valorPorSemana, semanasDescontadas, semanasUsadasPorOtros]
+    [getVPS, semanasDescontadas, semanasUsadasPorOtros]
   );
 
   const handleMontoChange = useCallback(
     (idx: number, value: string) => {
       const maxMonto = retiros[idx].montoRetiro;
       const monto = Math.min(Math.max(0, parseFloat(value) || 0), maxMonto);
-      const semanas =
-        valorPorSemana > 0 ? Math.round(monto / valorPorSemana) : 0;
+      const vps = getVPS(idx);
+      const semanas = vps > 0 ? Math.round(monto / vps) : 0;
       setRowData((prev) => ({ ...prev, [idx]: { semanas, monto } }));
     },
-    [valorPorSemana, retiros]
+    [getVPS, retiros]
   );
 
   if (retiros.length === 0 && semanasDescontadas === 0) return null;
@@ -311,10 +325,11 @@ export function RetirosDesempleo({
             </div>
 
             {/* VPS reference */}
-            {valorPorSemana > 0 && (
+            {vpsBase > 0 && (
               <p className="text-[10px] sm:text-[11px] text-muted-foreground font-mono">
-                Valor por semana estimado: {formatMXN(valorPorSemana)} (RCV
-                bruto {formatMXN(totalRCVBruto)} ÷ {semanasReconocidas} sem.)
+                VPS base: {formatMXN(vpsBase)} (RCV bruto{" "}
+                {formatMXN(totalRCVBruto)} ÷ {semanasReconocidas} sem.) —
+                ajustado por SBC de cada periodo
               </p>
             )}
 
