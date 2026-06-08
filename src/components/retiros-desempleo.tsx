@@ -22,6 +22,12 @@ function parseDDMMYYYY(s: string): Date {
   return new Date(Date.UTC(y, m - 1, d));
 }
 
+function fmtDate(d: Date): string {
+  const day = d.getUTCDate().toString().padStart(2, "0");
+  const month = (d.getUTCMonth() + 1).toString().padStart(2, "0");
+  return `${day}/${month}/${d.getUTCFullYear()}`;
+}
+
 const ANOS_ENTRE_RETIROS = 5;
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 const MS_5_YEARS = ANOS_ENTRE_RETIROS * 365.25 * MS_PER_DAY;
@@ -32,11 +38,19 @@ function isCurrentGap(fechaReingreso: string): boolean {
   return Math.abs(date.getTime() - now.getTime()) < 2 * MS_PER_DAY;
 }
 
+function addDays(dateStr: string, days: number): string {
+  const d = parseDDMMYYYY(dateStr);
+  d.setUTCDate(d.getUTCDate() + days);
+  return fmtDate(d);
+}
+
 export function RetirosDesempleo({
   retiros,
   semanasDescontadas,
 }: RetirosDesempleoProps) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [semanasInput, setSemanasInput] = useState<Record<number, number>>({});
+  const [montoInput, setMontoInput] = useState<Record<number, number>>({});
 
   const fechasBaja = useMemo(
     () => retiros.map((r) => parseDDMMYYYY(r.fechaBaja).getTime()),
@@ -59,19 +73,25 @@ export function RetirosDesempleo({
     return disabled;
   }, [selected, fechasBaja, retiros.length]);
 
-  const maxRetiroSeleccion = useMemo(() => {
-    let total = 0;
+  const totales = useMemo(() => {
+    let semanas = 0;
+    let monto = 0;
     for (const idx of selected) {
-      total += retiros[idx].montoRetiro;
+      semanas += semanasInput[idx] || 0;
+      monto += montoInput[idx] || 0;
     }
-    return total;
-  }, [selected, retiros]);
+    return { semanas, monto };
+  }, [selected, semanasInput, montoInput]);
+
+  const semanasRestantes = semanasDescontadas - totales.semanas;
 
   function toggleSelection(idx: number) {
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(idx)) {
         next.delete(idx);
+        setSemanasInput((p) => { const n = { ...p }; delete n[idx]; return n; });
+        setMontoInput((p) => { const n = { ...p }; delete n[idx]; return n; });
       } else {
         next.add(idx);
       }
@@ -105,37 +125,43 @@ export function RetirosDesempleo({
                 {semanasDescontadas} semanas descontadas
               </span>
               <span className="text-muted-foreground">
-                {" "}registradas en la constancia por retiro(s) parcial(es)
+                {" "}registradas en la constancia — selecciona e ingresa datos del estado de cuenta AFORE
               </span>
             </p>
           </div>
         )}
 
-        {/* Eligible periods table */}
+        {/* Table */}
         {retiros.length > 0 ? (
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Periodos de desempleo elegibles — selecciona los retiros ejercidos
+              Empleos con más de 45 días sin volverse a emplear
             </p>
             <div className="overflow-x-auto -mx-4 sm:-mx-5 px-4 sm:px-5">
               <table className="w-full text-xs sm:text-sm">
                 <thead>
                   <tr className="border-b border-wv-border text-left">
-                    <th className="pb-2 pr-2 text-center w-8"></th>
-                    <th className="pb-2 pr-3 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    <th className="pb-2 pr-1 text-center w-7"></th>
+                    <th className="pb-2 pr-2 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-center w-6">
+                      #
+                    </th>
+                    <th className="pb-2 pr-2 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       Baja
                     </th>
-                    <th className="pb-2 pr-3 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    <th className="pb-2 pr-2 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Fecha 46 días
+                    </th>
+                    <th className="pb-2 pr-2 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       Reingreso
                     </th>
-                    <th className="pb-2 pr-3 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
-                      Días sin empleo
+                    <th className="pb-2 pr-2 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
+                      SBC
                     </th>
-                    <th className="pb-2 pr-3 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
-                      Último SBC
+                    <th className="pb-2 pr-2 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
+                      Sem. Desc.
                     </th>
                     <th className="pb-2 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">
-                      Máx. retiro (Mod. A)
+                      Monto
                     </th>
                   </tr>
                 </thead>
@@ -144,18 +170,19 @@ export function RetirosDesempleo({
                     const isSelected = selected.has(i);
                     const isDisabled = disabledIndices.has(i);
                     const isCurrent = isCurrentGap(r.fechaReingreso);
+                    const rowNum = retiros.length - i;
                     return (
                       <tr
                         key={i}
                         className={`border-b border-wv-border/50 transition-colors ${
                           isDisabled
-                            ? "opacity-40"
+                            ? "bg-wv-red/5 opacity-50"
                             : isSelected
                               ? "bg-wv-cyan/5"
                               : "hover:bg-wv-hover"
                         }`}
                       >
-                        <td className="py-2 pr-2 text-center">
+                        <td className="py-1.5 pr-1 text-center">
                           <input
                             type="checkbox"
                             checked={isSelected}
@@ -164,24 +191,56 @@ export function RetirosDesempleo({
                             className="h-3.5 w-3.5 rounded border-wv-border text-wv-cyan focus:ring-wv-cyan focus:ring-offset-0 disabled:cursor-not-allowed"
                           />
                         </td>
-                        <td className="py-2 pr-3 font-mono">{r.fechaBaja}</td>
-                        <td className="py-2 pr-3 font-mono">
+                        <td className="py-1.5 pr-2 text-center text-muted-foreground">
+                          {rowNum}
+                        </td>
+                        <td className="py-1.5 pr-2 font-mono">{r.fechaBaja}</td>
+                        <td className="py-1.5 pr-2 font-mono text-muted-foreground">
+                          {addDays(r.fechaBaja, 46)}
+                        </td>
+                        <td className="py-1.5 pr-2 font-mono">
                           {isCurrent
                             ? <span className="text-wv-cyan italic">Actual</span>
                             : r.fechaReingreso}
                         </td>
-                        <td className="py-2 pr-3 text-right font-mono">
-                          {r.diasDesempleo}
-                        </td>
-                        <td className="py-2 pr-3 text-right font-mono">
+                        <td className="py-1.5 pr-2 text-right font-mono text-muted-foreground">
                           {formatMXN(r.salarioDiario)}
                         </td>
-                        <td className="py-2 text-right font-mono text-muted-foreground">
-                          {formatMXN(r.montoRetiro)}
-                          {r.topeAplicado && (
-                            <span className="text-[9px] text-wv-cyan ml-1" title="Tope 10× UMA mensual aplicado">
-                              *
-                            </span>
+                        <td className="py-1.5 pr-2 text-right">
+                          {isSelected ? (
+                            <input
+                              type="number"
+                              min={0}
+                              value={semanasInput[i] ?? ""}
+                              onChange={(e) => setSemanasInput((p) => ({
+                                ...p,
+                                [i]: Math.max(0, parseInt(e.target.value) || 0),
+                              }))}
+                              placeholder="0"
+                              className="w-16 rounded border border-wv-border bg-background px-1.5 py-0.5 text-xs sm:text-sm font-mono text-right focus:outline-none focus:ring-1 focus:ring-wv-cyan focus:border-transparent"
+                            />
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="py-1.5 text-right">
+                          {isSelected ? (
+                            <div className="relative">
+                              <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">$</span>
+                              <input
+                                type="number"
+                                min={0}
+                                value={montoInput[i] ?? ""}
+                                onChange={(e) => setMontoInput((p) => ({
+                                  ...p,
+                                  [i]: Math.max(0, parseFloat(e.target.value) || 0),
+                                }))}
+                                placeholder="0"
+                                className="w-24 rounded border border-wv-border bg-background pl-4 pr-1.5 py-0.5 text-xs sm:text-sm font-mono text-right focus:outline-none focus:ring-1 focus:ring-wv-cyan focus:border-transparent"
+                              />
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
                           )}
                         </td>
                       </tr>
@@ -191,56 +250,53 @@ export function RetirosDesempleo({
               </table>
             </div>
 
-            {/* Selection summary */}
+            {/* Summary */}
             {selected.size > 0 && (
               <div className="rounded-lg border border-wv-border bg-muted/40 p-3 space-y-2.5">
-                <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Resumen de selección
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
                   <div>
                     <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-                      Retiros seleccionados
+                      Monto a devolver
                     </p>
-                    <p className="text-sm sm:text-base font-bold font-mono mt-0.5">
-                      {selected.size}
+                    <p className="text-sm sm:text-base font-bold font-mono mt-0.5 text-wv-red">
+                      {totales.monto > 0 ? formatMXN(totales.monto) : "—"}
                     </p>
                   </div>
                   <div>
                     <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-                      Máx. retirable (Mod. A)
+                      Sem. ingresadas
                     </p>
                     <p className="text-sm sm:text-base font-bold font-mono mt-0.5">
-                      {formatMXN(maxRetiroSeleccion)}
+                      {totales.semanas}
                     </p>
                   </div>
-                  {semanasDescontadas > 0 && (
-                    <div>
-                      <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-                        Semanas descontadas
-                      </p>
-                      <p className="text-sm sm:text-base font-bold font-mono mt-0.5 text-wv-red">
-                        {semanasDescontadas}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="rounded-lg bg-wv-cyan/5 border border-wv-cyan/20 px-3 py-2">
-                  <p className="text-xs sm:text-sm text-muted-foreground">
-                    <span className="font-semibold text-foreground">Monto exacto a devolver:</span>{" "}
-                    consultar con la AFORE. El reintegro es por el monto nominal
-                    que se retiró en su momento (sin intereses). Solo la AFORE
-                    tiene el registro histórico de los montos.
-                  </p>
+                  <div>
+                    <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                      Sem. constancia
+                    </p>
+                    <p className="text-sm sm:text-base font-bold font-mono mt-0.5">
+                      {semanasDescontadas}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                      Restantes
+                    </p>
+                    <p className={`text-sm sm:text-base font-bold font-mono mt-0.5 ${
+                      semanasRestantes === 0
+                        ? "text-wv-green"
+                        : semanasRestantes < 0
+                          ? "text-wv-red"
+                          : ""
+                    }`}>
+                      {semanasRestantes}
+                      {semanasRestantes === 0 && (
+                        <span className="ml-1.5 text-[10px] font-semibold text-wv-green">Cuadra</span>
+                      )}
+                    </p>
+                  </div>
                 </div>
               </div>
-            )}
-
-            {retiros.some((r) => r.topeAplicado) && (
-              <p className="text-[10px] sm:text-[11px] text-muted-foreground">
-                * Máx. retiro limitado al tope de 10× UMA mensual vigente en el año de la baja
-              </p>
             )}
           </div>
         ) : semanasDescontadas > 0 ? (
@@ -250,18 +306,16 @@ export function RetirosDesempleo({
           </p>
         ) : null}
 
-        {/* Reference formulas */}
+        {/* Reference */}
         <div className="border-t border-wv-border/50 pt-3 space-y-2">
           <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Referencia — Art. 191 y 198 LSS
           </p>
-          <div className="text-[10px] sm:text-[11px] text-muted-foreground space-y-1">
-            <p><span className="font-medium text-foreground/70">Elegibilidad:</span> 46+ días naturales sin empleo, mín. 5 años entre retiros</p>
-            <p><span className="font-medium text-foreground/70">Modalidad A:</span> 30 días × último SBC (tope: 10× UMA mensual)</p>
-            <p><span className="font-medium text-foreground/70">Modalidad B:</span> menor entre 90 días × SBC prom. 250 sem. y 11.5% del saldo RCV</p>
-            <p><span className="font-medium text-foreground/70">Semanas descontadas:</span> monto retirado ÷ (saldo RCV ÷ semanas cotizadas) al momento del retiro</p>
-            <p><span className="font-medium text-foreground/70">Reintegro:</span> mismo monto nominal retirado, sin intereses. Parcial o total. Sin plazo límite.</p>
-            <p><span className="font-medium text-foreground/70">Semanas recuperadas:</span> semanas descontadas × (monto reintegrado ÷ monto total retirado)</p>
+          <div className="text-[10px] sm:text-[11px] text-muted-foreground space-y-0.5">
+            <p><span className="font-medium text-foreground/70">Elegibilidad:</span> 46+ días sin empleo, mín. 5 años entre retiros</p>
+            <p><span className="font-medium text-foreground/70">Mod. A:</span> 30 días × último SBC (tope 10× UMA). <span className="font-medium text-foreground/70">Mod. B:</span> menor entre 90d × SBC prom. 250 sem. y 11.5% RCV</p>
+            <p><span className="font-medium text-foreground/70">Reintegro:</span> monto nominal, sin intereses. Parcial o total, sin plazo límite</p>
+            <p><span className="font-medium text-foreground/70">Sem. recuperadas:</span> sem. descontadas × (monto reintegrado ÷ monto retirado)</p>
           </div>
         </div>
       </div>
