@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { formatMXN } from "@/lib/formatters";
+import { formatMXN, formatInt } from "@/lib/formatters";
 
 interface RetiroParcial {
   fechaBaja: string;
@@ -200,7 +200,7 @@ export function RetirosDesempleo({
             </svg>
             <p className="text-xs sm:text-sm">
               <span className="font-semibold text-wv-red">
-                {semanasDescontadas} semanas descontadas
+                {formatInt(semanasDescontadas)} semanas descontadas
               </span>
               <span className="text-muted-foreground">
                 {" "}registradas en la constancia
@@ -361,7 +361,7 @@ export function RetirosDesempleo({
               </div>
               <div className="bg-muted/60 rounded-lg p-2">
                 <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Sem. reconocidas</p>
-                <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{semanasReconocidas}</p>
+                <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{formatInt(semanasReconocidas)}</p>
               </div>
               <div className="bg-muted/60 rounded-lg p-2">
                 <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">VPS base</p>
@@ -387,7 +387,7 @@ export function RetirosDesempleo({
                       Sem. asignadas
                     </p>
                     <p className="text-sm sm:text-base font-bold font-mono mt-0.5">
-                      {totales.semanas}
+                      {formatInt(totales.semanas)}
                     </p>
                   </div>
                   <div>
@@ -395,7 +395,7 @@ export function RetirosDesempleo({
                       Constancia
                     </p>
                     <p className="text-sm sm:text-base font-bold font-mono mt-0.5">
-                      {semanasDescontadas}
+                      {formatInt(semanasDescontadas)}
                     </p>
                   </div>
                   <div>

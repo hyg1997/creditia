@@ -36,3 +36,7 @@ export function formatNumber(n: number, decimals = 2): string {
     maximumFractionDigits: decimals,
   });
 }
+
+export function formatInt(n: number): string {
+  return n.toLocaleString("es-MX");
+}

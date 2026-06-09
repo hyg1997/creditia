@@ -11,7 +11,7 @@ import { SalaryAverageBreakdown } from "@/components/salary-average-breakdown";
 import { PrintButton } from "@/components/print-button";
 import { RetirosDesempleo } from "@/components/retiros-desempleo";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { formatMXN } from "@/lib/formatters";
+import { formatMXN, formatInt } from "@/lib/formatters";
 
 function parseDDMMYYYY(s: string): Date {
   const [d, m, y] = s.split("/").map(Number);
@@ -42,23 +42,33 @@ function formatDiasCompleto(totalDias: number): string {
   return parts.join(" ");
 }
 
-function getCostoAnualPorSemanas(semanas: number): number {
-  if (semanas >= 1700) return 60000;
-  if (semanas >= 1450) return 70000;
-  if (semanas >= 1200) return 80000;
-  if (semanas >= 1000) return 90000;
-  return 100000;
+const RANGOS_COSTO = [
+  { minSemanas: 1700, costoAnual: 60000, label: "1,700+" },
+  { minSemanas: 1450, costoAnual: 70000, label: "1,450 — 1,699" },
+  { minSemanas: 1200, costoAnual: 80000, label: "1,200 — 1,449" },
+  { minSemanas: 1000, costoAnual: 90000, label: "1,000 — 1,199" },
+  { minSemanas: 0,    costoAnual: 100000, label: "< 1,000" },
+];
+
+function getCostoRango(semanas: number): { costoAnual: number; rangoIndex: number } {
+  for (let i = 0; i < RANGOS_COSTO.length; i++) {
+    if (semanas >= RANGOS_COSTO[i].minSemanas) {
+      return { costoAnual: RANGOS_COSTO[i].costoAnual, rangoIndex: i };
+    }
+  }
+  return { costoAnual: 100000, rangoIndex: RANGOS_COSTO.length - 1 };
 }
+
 const LIMITE_MOD10_DIAS = 4 * 365 + 11 * 30 + 22;
 const LIMITE_MOD40_DIAS = 11 * 30 + 12;
 
 const RANGOS_SEMANAS = [
-  { semanas: 900, label: "Hasta 60 años 6 meses 0 días" },
-  { semanas: 870, label: "60 años 6 meses 1 día a 61 años 6 meses 0 días" },
-  { semanas: 840, label: "61 años 6 meses 1 día a 62 años 6 meses 0 días" },
-  { semanas: 810, label: "62 años 6 meses 1 día a 63 años 6 meses 0 días" },
-  { semanas: 780, label: "63 años 6 meses 1 día a 64 años 6 meses 0 días" },
-  { semanas: 750, label: "Más de 64 años 6 meses 1 día" },
+  { semanas: 900, label: "Hasta 60a 6m" },
+  { semanas: 870, label: "60a 6m — 61a 6m" },
+  { semanas: 840, label: "61a 6m — 62a 6m" },
+  { semanas: 810, label: "62a 6m — 63a 6m" },
+  { semanas: 780, label: "63a 6m — 64a 6m" },
+  { semanas: 750, label: "Más de 64a 6m" },
 ];
 
 function getSemanasMinByEdad(fechaNac: Date | null): { minSemanas: number; rangoIndex: number } {
@@ -386,7 +396,7 @@ export default function Home() {
       viviendaAjustada
     : 0;
   const sinTrabajar = result ? calcSinTrabajar(result.records) : null;
-  const costoAnual = getCostoAnualPorSemanas(semanasTotales);
+  const { costoAnual, rangoIndex: costoRangoIndex } = getCostoRango(semanasTotales);
   const costoDiario = costoAnual / 365;
   const montoRequerido = sinTrabajar
     ? Math.round(sinTrabajar.dias * costoDiario)
@@ -616,7 +626,7 @@ export default function Home() {
             {(() => {
               const razones: string[] = [];
               if (!isLey73) razones.push("Régimen Ley 97");
-              if (!cumpleSemanas) razones.push(`Faltan ${900 - semanasTotales} semanas`);
+              if (!cumpleSemanas) razones.push(`Faltan ${formatInt(semanasMinimas - semanasTotales)} semanas`);
               if (!cumpleAfore) razones.push(`Faltante AFORE: ${formatMXN(faltante)}`);
               if (modalidad === "mod10" && !mod10Cumple) razones.push("No cumple Modalidad 10");
               if (modalidad === "mod40" && !mod40Cumple) razones.push("No cumple Modalidad 40");
@@ -651,7 +661,7 @@ export default function Home() {
                       </div>
                       <div>
                         <p className="font-bold text-sm sm:text-lg text-wv-green">Acredita Financiamiento Ahora</p>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{edad} años, {semanasTotales} semanas, {mesesSinCotizar} meses sin cotizar</p>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{edad} años, {formatInt(semanasTotales)} semanas, {mesesSinCotizar} meses sin cotizar</p>
                       </div>
                     </div>
                   </div>
@@ -668,7 +678,7 @@ export default function Home() {
                       <div>
                         <p className="font-bold text-sm sm:text-lg text-wv-cyan">Acredita Financiamiento Futuro</p>
                         <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
-                          {edad} años, {semanasTotales} semanas
+                          {edad} años, {formatInt(semanasTotales)} semanas
                           {!asesoriaAhoraCumple && (
                             <span> — No acredita Ahora: {!asesoriaAhoraCumpleEdad ? `necesita 60 años (tiene ${edad})` : `necesita +12 meses sin cotizar (tiene ${mesesSinCotizar})`}</span>
                           )}
@@ -728,7 +738,7 @@ export default function Home() {
                       <div className="min-w-0">
                         <p className="font-medium text-xs sm:text-sm">Semanas Cotizadas</p>
                         <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 leading-tight">
-                          {semanasTotales} semanas — Mínimo requerido: {semanasMinimas}
+                          {formatInt(semanasTotales)} semanas — Mínimo requerido: {formatInt(semanasMinimas)}
                           {edadExacta && <> (edad: {edadExacta.anos}a {edadExacta.meses}m {edadExacta.dias}d)</>}
                         </p>
                       </div>
@@ -753,7 +763,7 @@ export default function Home() {
                                   ? "bg-wv-cyan/10 font-semibold"
                                   : "border-t border-wv-border/50"}
                               >
-                                <td className={`px-2.5 sm:px-3 py-1 font-mono ${isActive ? "text-wv-cyan" : ""}`}>{r.semanas}</td>
+                                <td className={`px-2.5 sm:px-3 py-1 font-mono ${isActive ? "text-wv-cyan" : ""}`}>{formatInt(r.semanas)}</td>
                                 <td className={`px-2.5 sm:px-3 py-1 ${isActive ? "text-wv-cyan" : "text-muted-foreground"}`}>{r.label}</td>
                               </tr>
                             );
@@ -765,15 +775,15 @@ export default function Home() {
                     <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                       <div className="bg-muted/60 rounded-lg p-2">
                         <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Cotizadas</p>
-                        <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{result.header.totalSemanasCotizadas}</p>
+                        <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{formatInt(result.header.totalSemanasCotizadas)}</p>
                       </div>
                       <div className="bg-muted/60 rounded-lg p-2">
                         <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Descontadas</p>
-                        <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5 text-wv-red">{result.header.semanasDescontadas}</p>
+                        <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5 text-wv-red">{formatInt(result.header.semanasDescontadas)}</p>
                       </div>
                       <div className="bg-muted/60 rounded-lg p-2">
                         <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Reintegradas</p>
-                        <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5 text-wv-green">{result.header.semanasReintegradas}</p>
+                        <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5 text-wv-green">{formatInt(result.header.semanasReintegradas)}</p>
                       </div>
                     </div>
                   </div>
@@ -790,12 +800,41 @@ export default function Home() {
                           Saldo AFORE
                         </p>
                         <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
-                          Mín. {formatMXN(costoAnual)}/año sin trabajar (
-                          {formatMXN(Math.round(costoDiario))}/día)
+                          Costo: {formatMXN(costoAnual)}/año ({formatMXN(Math.round(costoDiario))}/día) — {formatInt(semanasTotales)} semanas
                         </p>
                       </div>
                       <StatusBadge pass={cumpleAfore} />
                     </div>
+
+                    <div className="rounded-lg border border-wv-border overflow-hidden">
+                      <table className="w-full text-[10px] sm:text-xs">
+                        <thead>
+                          <tr className="bg-muted/40">
+                            <th className="px-2.5 sm:px-3 py-1.5 text-left font-medium text-muted-foreground">Semanas</th>
+                            <th className="px-2.5 sm:px-3 py-1.5 text-right font-medium text-muted-foreground">Costo/año</th>
+                            <th className="px-2.5 sm:px-3 py-1.5 text-right font-medium text-muted-foreground">Costo/día</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {RANGOS_COSTO.map((rc, i) => {
+                            const isActive = i === costoRangoIndex;
+                            return (
+                              <tr
+                                key={i}
+                                className={isActive
+                                  ? "bg-wv-cyan/10 font-semibold"
+                                  : "border-t border-wv-border/50"}
+                              >
+                                <td className={`px-2.5 sm:px-3 py-1 ${isActive ? "text-wv-cyan" : "text-muted-foreground"}`}>{rc.label}</td>
+                                <td className={`px-2.5 sm:px-3 py-1 text-right font-mono ${isActive ? "text-wv-cyan" : ""}`}>{formatMXN(rc.costoAnual)}</td>
+                                <td className={`px-2.5 sm:px-3 py-1 text-right font-mono ${isActive ? "text-wv-cyan" : ""}`}>{formatMXN(Math.round(rc.costoAnual / 365))}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
                       <div className="bg-muted/60 rounded-lg p-2">
                         <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
@@ -811,7 +850,7 @@ export default function Home() {
                                 `${sinTrabajar.diasRestantes}d`}
                               <span className="text-muted-foreground font-normal text-[10px] sm:text-xs">
                                 {" "}
-                                ({sinTrabajar.dias}d)
+                                ({formatInt(sinTrabajar.dias)}d)
                               </span>
                             </>
                           ) : (
