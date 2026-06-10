@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { PdfUpload } from "@/components/pdf-upload";
@@ -12,6 +12,7 @@ import { PrintButton } from "@/components/print-button";
 import { RetirosDesempleo } from "@/components/retiros-desempleo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { formatMXN, formatInt } from "@/lib/formatters";
+import { calcEscenarios, type ScenarioOutput } from "@/lib/calculations/pension-scenarios";
 
 function parseDDMMYYYY(s: string): Date {
   const [d, m, y] = s.split("/").map(Number);
@@ -63,12 +64,12 @@ const LIMITE_MOD10_DIAS = 4 * 365 + 11 * 30 + 22;
 const LIMITE_MOD40_DIAS = 11 * 30 + 12;
 
 const RANGOS_SEMANAS = [
-  { semanas: 900, label: "Hasta 60a 6m" },
-  { semanas: 870, label: "60a 6m — 61a 6m" },
-  { semanas: 840, label: "61a 6m — 62a 6m" },
-  { semanas: 810, label: "62a 6m — 63a 6m" },
-  { semanas: 780, label: "63a 6m — 64a 6m" },
-  { semanas: 750, label: "Más de 64a 6m" },
+  { semanas: 900, label: "Hasta 60.5 años" },
+  { semanas: 870, label: "60.5 — 61.5 años" },
+  { semanas: 840, label: "61.5 — 62.5 años" },
+  { semanas: 810, label: "62.5 — 63.5 años" },
+  { semanas: 780, label: "63.5 — 64.5 años" },
+  { semanas: 750, label: "Más de 64.5 años" },
 ];
 
 function getSemanasMinByEdad(fechaNac: Date | null): { minSemanas: number; rangoIndex: number } {
@@ -213,6 +214,80 @@ function calcSemanasIninterrumpidas(
   return Math.floor(maxDias / 7);
 }
 
+function addMonths(date: Date, months: number): Date {
+  return new Date(Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth() + months,
+    date.getUTCDate(),
+  ));
+}
+
+function diffMonths(from: Date, to: Date): number {
+  return (to.getUTCFullYear() - from.getUTCFullYear()) * 12
+    + (to.getUTCMonth() - from.getUTCMonth());
+}
+
+const MESES_ES = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+
+function formatMesAno(date: Date): string {
+  return `${MESES_ES[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+}
+
+function applyDay15Rule(referenceDate: Date): Date {
+  const day = referenceDate.getUTCDate();
+  if (day <= 15) {
+    return new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth(), 1));
+  }
+  return new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth() + 1, 1));
+}
+
+interface MesPensionResult {
+  mesPension: Date;
+  razon: string;
+  cumple60: boolean;
+  pasaron6Meses: boolean;
+  fecha60: Date | null;
+  fecha6Meses: Date;
+}
+
+function calcMesPensionPronta(
+  fechaNacimiento: Date,
+  ultimaCotizacion: Date,
+): MesPensionResult {
+  const hoy = new Date();
+  const fecha60 = new Date(Date.UTC(
+    fechaNacimiento.getUTCFullYear() + 60,
+    fechaNacimiento.getUTCMonth(),
+    fechaNacimiento.getUTCDate(),
+  ));
+  const fecha6Meses = addMonths(ultimaCotizacion, 6);
+
+  const cumple60 = hoy.getTime() >= fecha60.getTime();
+  const pasaron6Meses = hoy.getTime() >= fecha6Meses.getTime();
+
+  if (cumple60) {
+    if (pasaron6Meses) {
+      const mesPension = applyDay15Rule(hoy);
+      return { mesPension, razon: "Ya cumple 60 y ya pasaron 6 meses de conservacion. Se aplica regla del dia 15 a hoy.", cumple60, pasaron6Meses, fecha60, fecha6Meses };
+    } else {
+      const mesPension = applyDay15Rule(fecha6Meses);
+      return { mesPension, razon: "Ya cumple 60 pero NO han pasado 6 meses. Se aplica regla del dia 15 a la fecha en que se cumplen 6 meses.", cumple60, pasaron6Meses, fecha60, fecha6Meses };
+    }
+  } else {
+    if (pasaron6Meses) {
+      const mesPension = applyDay15Rule(fecha60);
+      return { mesPension, razon: "NO cumple 60 pero ya pasaron 6 meses. Se aplica regla del dia 15 al dia que cumple 60.", cumple60, pasaron6Meses, fecha60, fecha6Meses };
+    } else {
+      const fechaLimite = fecha60.getTime() > fecha6Meses.getTime() ? fecha60 : fecha6Meses;
+      const mesPension = applyDay15Rule(new Date(fechaLimite));
+      return { mesPension, razon: "NO cumple 60 y NO han pasado 6 meses. Se toma la fecha mas tardia (60 años o 6 meses) y se aplica regla del dia 15.", cumple60, pasaron6Meses, fecha60, fecha6Meses };
+    }
+  }
+}
+
 interface SubcuentaTotal {
   aportaciones: number;
   rendimientos: number;
@@ -342,12 +417,27 @@ function SubCheck({
   );
 }
 
+function MetricCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="bg-wv-surface rounded-xl border border-wv-border p-4">
+      <p className="text-[10px] sm:text-xs uppercase tracking-wider text-muted-foreground font-medium">{label}</p>
+      <p className="text-lg sm:text-2xl font-bold font-mono mt-1 text-wv-cyan">{value}</p>
+      {sub && <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+type Tab = "calculadora" | "asesoria";
+
 export default function Home() {
   const [result, setResult] = useState<ApiResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [tieneCredito, setTieneCredito] = useState(false);
   const [montoCredito, setMontoCredito] = useState(0);
+  const [activeTab, setActiveTab] = useState<Tab>("calculadora");
+  const [esposa, setEsposa] = useState(true);
+  const [hijos, setHijos] = useState(0);
 
   const handleTextExtracted = useCallback(async (text: string) => {
     setIsProcessing(true);
@@ -376,6 +466,9 @@ export default function Home() {
     setError(null);
     setTieneCredito(false);
     setMontoCredito(0);
+    setActiveTab("calculadora");
+    setEsposa(true);
+    setHijos(0);
   }, []);
 
   const isLey73 = result?.regimen === "ley73";
@@ -451,6 +544,31 @@ export default function Home() {
         .map((n) => n[0])
         .join("")
     : "";
+
+  const pensionResult = useMemo(() => {
+    if (!edadInfo?.fechaNacimiento || !ultimaCotizacion) return null;
+    return calcMesPensionPronta(edadInfo.fechaNacimiento, ultimaCotizacion);
+  }, [edadInfo?.fechaNacimiento, ultimaCotizacion]);
+
+  const mesesRetroactivo = useMemo(() => {
+    if (!ultimaCotizacion || !pensionResult) return null;
+    return diffMonths(ultimaCotizacion, pensionResult.mesPension);
+  }, [ultimaCotizacion, pensionResult]);
+
+  const escenarios: ScenarioOutput | null = useMemo(() => {
+    if (!result || !edadInfo?.fechaNacimiento || !ultimaCotizacion || !pensionResult) return null;
+    return calcEscenarios({
+      salarioPromedio: result.salaryAverage.promedio,
+      salaryPeriods: result.salaryAverage.periods,
+      totalSemanas: result.header.totalSemanasCotizadas,
+      semanasReintegradas: result.header.semanasReintegradas,
+      fechaNacimiento: edadInfo.fechaNacimiento,
+      ultimaCotizacion,
+      mesPensionPronta: pensionResult.mesPension,
+      esposa,
+      hijos,
+    });
+  }, [result, edadInfo?.fechaNacimiento, ultimaCotizacion, pensionResult, esposa, hijos]);
 
   return (
     <main className="flex-1">
@@ -622,6 +740,33 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Tab Navigation */}
+            {isLey73 && (
+              <div className="flex gap-1 bg-wv-surface rounded-xl border border-wv-border p-1 no-print">
+                <button
+                  onClick={() => setActiveTab("calculadora")}
+                  className={`flex-1 px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
+                    activeTab === "calculadora"
+                      ? "bg-wv-cyan/10 text-wv-cyan"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                  }`}
+                >
+                  Calculadora
+                </button>
+                <button
+                  onClick={() => setActiveTab("asesoria")}
+                  className={`flex-1 px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
+                    activeTab === "asesoria"
+                      ? "bg-wv-cyan/10 text-wv-cyan"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                  }`}
+                >
+                  Asesoria
+                </button>
+              </div>
+            )}
+
+            {activeTab === "calculadora" && (<>
             {/* Verdict Banner */}
             {(() => {
               const razones: string[] = [];
@@ -763,8 +908,8 @@ export default function Home() {
                                   ? "bg-wv-cyan/10 font-semibold"
                                   : "border-t border-wv-border/50"}
                               >
-                                <td className={`px-2.5 sm:px-3 py-1 font-mono ${isActive ? "text-wv-cyan" : ""}`}>{formatInt(r.semanas)}</td>
-                                <td className={`px-2.5 sm:px-3 py-1 ${isActive ? "text-wv-cyan" : "text-muted-foreground"}`}>{r.label}</td>
+                                <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 font-mono ${isActive ? "text-wv-cyan" : ""}`}>{formatInt(r.semanas)}</td>
+                                <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 ${isActive ? "text-wv-cyan" : "text-muted-foreground"}`}>{r.label}</td>
                               </tr>
                             );
                           })}
@@ -1179,6 +1324,174 @@ export default function Home() {
                     para el saldo oficial.
                   </p>
                 </footer>
+              </>
+            )}
+            </>)}
+
+            {activeTab === "asesoria" && isLey73 && (
+              <>
+                {/* Key Metrics */}
+                <section>
+                  <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
+                    <div className="h-4 w-1 rounded-full bg-wv-cyan" />
+                    <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">Metricas del Expediente</h2>
+                  </div>
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+                    <MetricCard
+                      label="Semanas Cotizadas"
+                      value={formatInt(semanasTotales)}
+                      sub={`Cotizadas: ${formatInt(result.header.totalSemanasCotizadas)} | Desc: ${formatInt(result.header.semanasDescontadas)} | Reint: ${formatInt(result.header.semanasReintegradas)}`}
+                    />
+                    <MetricCard
+                      label="Promedio Salarial"
+                      value={formatMXN(result.salaryAverage.promedio)}
+                      sub={`${formatMXN(result.salaryAverage.promedio * 30.4)} mensual`}
+                    />
+                    {edadExacta && (
+                      <MetricCard
+                        label="Edad Actual"
+                        value={`${edadExacta.anos} años`}
+                        sub={`${edadExacta.anos} años, ${edadExacta.meses} meses, ${edadExacta.dias} dias`}
+                      />
+                    )}
+                  </div>
+                </section>
+
+                {/* Mes Pension Pronta */}
+                {pensionResult && (
+                  <section>
+                    <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
+                      <div className="h-4 w-1 rounded-full bg-wv-green" />
+                      <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">Mes Pension Pronta</h2>
+                    </div>
+                    <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
+                      <div className="border-l-4 border-l-wv-green px-4 sm:px-5 py-4 sm:py-5 space-y-4">
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <p className="text-[10px] sm:text-xs uppercase tracking-wider text-muted-foreground font-medium">Pension desde</p>
+                            <p className="text-2xl sm:text-3xl font-bold font-mono text-wv-green mt-1">
+                              {formatMesAno(pensionResult.mesPension)}
+                            </p>
+                          </div>
+                          {mesesRetroactivo !== null && mesesRetroactivo > 0 && (
+                            <div className="text-right">
+                              <p className="text-[10px] sm:text-xs uppercase tracking-wider text-muted-foreground font-medium">Meses en retroactivo</p>
+                              <p className="text-2xl sm:text-3xl font-bold font-mono text-wv-cyan mt-1">
+                                {mesesRetroactivo}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          <div className={`rounded-lg p-2.5 border ${pensionResult.cumple60 ? "bg-wv-green/5 border-wv-green/20" : "bg-wv-red/5 border-wv-red/20"}`}>
+                            <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Cumple 60 años</p>
+                            <p className={`text-xs sm:text-sm font-semibold mt-0.5 ${pensionResult.cumple60 ? "text-wv-green" : "text-wv-red"}`}>
+                              {pensionResult.cumple60 ? "Si" : "No"}
+                              {!pensionResult.cumple60 && pensionResult.fecha60 && (
+                                <span className="text-muted-foreground font-normal text-[10px]"> — cumple el {pensionResult.fecha60.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}</span>
+                              )}
+                            </p>
+                          </div>
+                          <div className={`rounded-lg p-2.5 border ${pensionResult.pasaron6Meses ? "bg-wv-green/5 border-wv-green/20" : "bg-wv-red/5 border-wv-red/20"}`}>
+                            <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">6 meses conservacion</p>
+                            <p className={`text-xs sm:text-sm font-semibold mt-0.5 ${pensionResult.pasaron6Meses ? "text-wv-green" : "text-wv-red"}`}>
+                              {pensionResult.pasaron6Meses ? "Si" : "No"}
+                              {!pensionResult.pasaron6Meses && (
+                                <span className="text-muted-foreground font-normal text-[10px]"> — {pensionResult.fecha6Meses.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}</span>
+                              )}
+                            </p>
+                          </div>
+                          <div className="rounded-lg p-2.5 border border-wv-border bg-muted/30">
+                            <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Ultima cotizacion</p>
+                            <p className="text-xs sm:text-sm font-semibold mt-0.5">
+                              {ultimaCotizacion?.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
+                            </p>
+                          </div>
+                          <div className="rounded-lg p-2.5 border border-wv-border bg-muted/30">
+                            <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Regla dia 15</p>
+                            <p className="text-xs sm:text-sm font-semibold mt-0.5 text-muted-foreground">
+                              {pensionResult.razon.includes("hoy") ? "Aplicada a hoy" : "Aplicada a fecha futura"}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="text-[10px] sm:text-[11px] text-muted-foreground italic">
+                          {pensionResult.razon}
+                        </p>
+                      </div>
+                    </div>
+                  </section>
+                )}
+
+                {/* Pension Scenarios */}
+                {escenarios && (
+                  <section>
+                    <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
+                      <div className="h-4 w-1 rounded-full bg-wv-cyan" />
+                      <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">Escenarios de Pension</h2>
+                      <span className="text-[9px] sm:text-[10px] text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full">Mod 40 Retroactivo</span>
+                    </div>
+                    <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
+                      <div className="px-4 sm:px-5 py-4 sm:py-5 space-y-4">
+                        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+                          <label className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={esposa}
+                              onChange={(e) => setEsposa(e.target.checked)}
+                              className="rounded border-wv-border"
+                            />
+                            Esposa/concubina
+                          </label>
+                          <label className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground">
+                            Hijos
+                            <select
+                              value={hijos}
+                              onChange={(e) => setHijos(Number(e.target.value))}
+                              className="rounded border border-wv-border bg-background px-1.5 py-0.5 text-[10px] sm:text-xs font-mono"
+                            >
+                              {[0, 1, 2, 3, 4, 5].map((n) => (
+                                <option key={n} value={n}>{n}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <span className="text-[9px] sm:text-[10px] text-muted-foreground">
+                            SBC Mod 40: {formatMXN(escenarios.mod40Salary)} diario (25 UMA)
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="rounded-xl border-2 border-wv-border bg-muted/20 p-4 text-center">
+                            <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Pension Actual</p>
+                            <p className="text-xl sm:text-2xl font-bold font-mono mt-1">{formatMXN(escenarios.pensionActual.pensionNeta)}</p>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">mensual neta</p>
+                          </div>
+                          <div className="rounded-xl border-2 border-wv-green/40 bg-wv-green/5 p-4 text-center">
+                            <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Pension Pronta</p>
+                            <p className="text-xl sm:text-2xl font-bold font-mono mt-1 text-wv-green">{formatMXN(escenarios.pensionPronta.pensionNeta)}</p>
+                            <p className="text-xs sm:text-sm font-semibold text-wv-green mt-1">+{formatMXN(escenarios.incremento1)}</p>
+                            <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">
+                              Prom: {formatMXN(escenarios.promedioE1)} · {Math.round(escenarios.mod40WeeksE1)} sem M40
+                            </p>
+                          </div>
+                          <div className="rounded-xl border-2 border-wv-cyan/40 bg-wv-cyan/5 p-4 text-center">
+                            <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Pension +6 Meses</p>
+                            <p className="text-xl sm:text-2xl font-bold font-mono mt-1 text-wv-cyan">{formatMXN(escenarios.pension6Meses.pensionNeta)}</p>
+                            <p className="text-xs sm:text-sm font-semibold text-wv-cyan mt-1">+{formatMXN(escenarios.incremento2)}</p>
+                            <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">
+                              Prom: {formatMXN(escenarios.promedioE2)} · {Math.round(escenarios.mod40WeeksE2)} sem M40
+                            </p>
+                          </div>
+                        </div>
+                        {(escenarios.pensionPronta.isr > 0 || escenarios.pension6Meses.isr > 0) && (
+                          <div className="text-[9px] sm:text-[10px] text-muted-foreground space-y-0.5 pt-1 border-t border-wv-border/50">
+                            {escenarios.pensionActual.isr > 0 && <p>ISR Actual: {formatMXN(escenarios.pensionActual.isr)} (Bruta: {formatMXN(escenarios.pensionActual.pensionBruta)})</p>}
+                            {escenarios.pensionPronta.isr > 0 && <p>ISR Pronta: {formatMXN(escenarios.pensionPronta.isr)} (Bruta: {formatMXN(escenarios.pensionPronta.pensionBruta)})</p>}
+                            {escenarios.pension6Meses.isr > 0 && <p>ISR +6m: {formatMXN(escenarios.pension6Meses.isr)} (Bruta: {formatMXN(escenarios.pension6Meses.pensionBruta)})</p>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </section>
+                )}
               </>
             )}
           </div>
