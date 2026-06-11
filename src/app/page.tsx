@@ -1394,10 +1394,13 @@ export default function Home() {
                           <div className="relative flex-1">
                             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
                             <input
-                              type="number"
-                              min={0}
-                              value={montoCredito || ""}
-                              onChange={(e) => setMontoCredito(Math.max(0, Number(e.target.value)))}
+                              type="text"
+                              inputMode="numeric"
+                              value={montoCredito ? formatInt(montoCredito) : ""}
+                              onChange={(e) => {
+                                const raw = e.target.value.replace(/[^0-9]/g, "");
+                                setMontoCredito(raw ? Math.max(0, Number(raw)) : 0);
+                              }}
                               placeholder="0"
                               className="w-full rounded-lg border border-wv-border bg-background pl-6 pr-3 py-1.5 text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-wv-cyan focus:border-transparent"
                             />
@@ -1631,6 +1634,9 @@ export default function Home() {
                           <div className="rounded-xl border-2 border-wv-green/40 bg-wv-green/5 p-4">
                             <div className="text-center">
                               <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Pension Pronta</p>
+                              {pensionResult && (
+                                <p className="text-[9px] sm:text-[10px] text-wv-green/70 font-medium">{formatMesAno(pensionResult.mesPension)}</p>
+                              )}
                               <p className="text-xl sm:text-2xl font-bold font-mono mt-1 text-wv-green">{formatMXN(escenarios.pensionPronta.pensionNeta)}</p>
                               <p className="text-xs sm:text-sm font-semibold text-wv-green mt-1">+{formatMXN(escenarios.incremento1)}</p>
                               <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">
@@ -1642,6 +1648,9 @@ export default function Home() {
                           <div className="rounded-xl border-2 border-wv-cyan/40 bg-wv-cyan/5 p-4">
                             <div className="text-center">
                               <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Pension +6 Meses</p>
+                              {pensionResult && (
+                                <p className="text-[9px] sm:text-[10px] text-wv-cyan/70 font-medium">{formatMesAno(addMonths(pensionResult.mesPension, 6))}</p>
+                              )}
                               <p className="text-xl sm:text-2xl font-bold font-mono mt-1 text-wv-cyan">{formatMXN(escenarios.pension6Meses.pensionNeta)}</p>
                               <p className="text-xs sm:text-sm font-semibold text-wv-cyan mt-1">+{formatMXN(escenarios.incremento2)}</p>
                               <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">
