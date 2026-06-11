@@ -151,20 +151,30 @@ function getUltimoRegistro(
   });
 }
 
-function calcSemanasIninterrumpidas(
+interface SemanasDetail {
+  semanas: number;
+  totalDias: number;
+  windowStart: Date;
+  windowEnd: Date;
+  mod40Corte: Date | null;
+  periodos: { inicio: Date; fin: Date; dias: number; semanas: number }[];
+}
+
+function calcSemanasEn5Anos(
   records: { fechaAlta: string; fechaBaja: string; registroPatronal: string }[],
   ultimaCotizacion: Date,
-): number {
+): SemanasDetail {
   const MS_DAY = 1000 * 60 * 60 * 24;
-  let windowStart = new Date(
+  const windowOriginal = new Date(
     Date.UTC(
       ultimaCotizacion.getUTCFullYear() - 5,
       ultimaCotizacion.getUTCMonth(),
       ultimaCotizacion.getUTCDate(),
     ),
   );
+  let windowStart = windowOriginal;
+  let mod40Corte: Date | null = null;
 
-  // If there's a Mod 40 in the 5-year window, start counting from its end
   for (const r of records) {
     const suffix = r.registroPatronal.slice(-2);
     if (suffix !== "33" && suffix !== "40") continue;
@@ -172,44 +182,47 @@ function calcSemanasIninterrumpidas(
     if (baja.getTime() >= windowStart.getTime() && baja.getTime() <= ultimaCotizacion.getTime()) {
       if (baja.getTime() > windowStart.getTime()) {
         windowStart = baja;
+        mod40Corte = baja;
       }
     }
   }
 
-  // Collect and clip periods within the window
-  const periods: { inicio: number; fin: number }[] = [];
+  const rawPeriods: { inicio: number; fin: number }[] = [];
   for (const r of records) {
     const alta = parseDDMMYYYY(r.fechaAlta);
     const baja = parseDDMMYYYY(r.fechaBaja);
     const start = Math.max(alta.getTime(), windowStart.getTime());
     const end = Math.min(baja.getTime(), ultimaCotizacion.getTime());
     if (start <= end) {
-      periods.push({ inicio: start, fin: end });
+      rawPeriods.push({ inicio: start, fin: end });
     }
   }
 
-  if (periods.length === 0) return 0;
+  if (rawPeriods.length === 0) {
+    return { semanas: 0, totalDias: 0, windowStart, windowEnd: ultimaCotizacion, mod40Corte, periodos: [] };
+  }
 
-  // Sort by start date and merge overlapping/adjacent (1-day tolerance for baja→alta)
-  periods.sort((a, b) => a.inicio - b.inicio);
+  rawPeriods.sort((a, b) => a.inicio - b.inicio);
   const merged: { inicio: number; fin: number }[] = [];
-  let cur = { ...periods[0] };
-  for (let i = 1; i < periods.length; i++) {
-    if (periods[i].inicio <= cur.fin + MS_DAY) {
-      cur.fin = Math.max(cur.fin, periods[i].fin);
+  let cur = { ...rawPeriods[0] };
+  for (let i = 1; i < rawPeriods.length; i++) {
+    if (rawPeriods[i].inicio <= cur.fin + MS_DAY) {
+      cur.fin = Math.max(cur.fin, rawPeriods[i].fin);
     } else {
       merged.push(cur);
-      cur = { ...periods[i] };
+      cur = { ...rawPeriods[i] };
     }
   }
   merged.push(cur);
 
   let totalDias = 0;
-  for (const p of merged) {
-    totalDias += Math.floor((p.fin - p.inicio) / MS_DAY) + 1;
-  }
+  const periodos = merged.map((p) => {
+    const dias = Math.floor((p.fin - p.inicio) / MS_DAY) + 1;
+    totalDias += dias;
+    return { inicio: new Date(p.inicio), fin: new Date(p.fin), dias, semanas: Math.floor(dias / 7) };
+  });
 
-  return Math.floor(totalDias / 7);
+  return { semanas: Math.floor(totalDias / 7), totalDias, windowStart, windowEnd: ultimaCotizacion, mod40Corte, periodos };
 }
 
 function addMonths(date: Date, months: number): Date {
@@ -505,10 +518,11 @@ export default function Home() {
   const diasSinCotizar = sinTrabajar ? sinTrabajar.dias : 0;
 
   const mod10CumpleTiempo = diasSinCotizar <= LIMITE_MOD10_DIAS;
-  const semanasEn5Anos =
+  const semanasDetail =
     result && ultimaCotizacion
-      ? calcSemanasIninterrumpidas(result.records, ultimaCotizacion)
-      : 0;
+      ? calcSemanasEn5Anos(result.records, ultimaCotizacion)
+      : null;
+  const semanasEn5Anos = semanasDetail?.semanas ?? 0;
   const mod10CumpleSemanas = semanasEn5Anos >= 52;
   const mod10Cumple = mod10CumpleTiempo && mod10CumpleSemanas;
 
@@ -1059,9 +1073,60 @@ export default function Home() {
                             <SubCheck
                               pass={mod10CumpleSemanas}
                               label="Mín. 52 sem. cotizadas en 5 años"
-                              value={`${semanasEn5Anos} semanas`}
+                              value={`${semanasEn5Anos} semanas (${semanasDetail?.totalDias ?? 0} días)`}
                             />
                           </div>
+
+                          {/* Breakdown visual */}
+                          {semanasDetail && (
+                            <div className="mt-2 pt-2 border-t border-wv-border/50 space-y-2">
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[9px] sm:text-[10px] text-muted-foreground">
+                                <span>
+                                  Ventana: {semanasDetail.windowStart.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
+                                  {" → "}
+                                  {semanasDetail.windowEnd.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
+                                </span>
+                                {semanasDetail.mod40Corte && (
+                                  <span className="text-amber-500">
+                                    Mod 40 recortó ventana al {semanasDetail.mod40Corte.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
+                                  </span>
+                                )}
+                              </div>
+
+                              {semanasDetail.periodos.length > 0 && (
+                                <div className="space-y-1">
+                                  {semanasDetail.periodos.map((p, i) => {
+                                    const pct = semanasDetail.totalDias > 0 ? (p.dias / semanasDetail.totalDias) * 100 : 0;
+                                    return (
+                                      <div key={i} className="space-y-0.5">
+                                        <div className="flex items-center justify-between text-[9px] sm:text-[10px]">
+                                          <span className="text-muted-foreground">
+                                            {p.inicio.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" })}
+                                            {" → "}
+                                            {p.fin.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" })}
+                                          </span>
+                                          <span className={`font-mono font-medium ${mod10CumpleSemanas ? "text-wv-green" : "text-foreground"}`}>
+                                            {p.semanas} sem ({p.dias}d)
+                                          </span>
+                                        </div>
+                                        <div className="h-1.5 rounded-full bg-wv-border/40 overflow-hidden">
+                                          <div
+                                            className={`h-full rounded-full ${mod10CumpleSemanas ? "bg-wv-green" : "bg-wv-red"}`}
+                                            style={{ width: `${Math.max(pct, 2)}%` }}
+                                          />
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                  {!mod10CumpleSemanas && (
+                                    <p className="text-[9px] sm:text-[10px] text-wv-red mt-1">
+                                      Faltan {52 - semanasEn5Anos} semanas para cumplir el mínimo de 52
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
