@@ -204,14 +204,12 @@ function calcSemanasIninterrumpidas(
   }
   merged.push(cur);
 
-  // Find the longest continuous stretch
-  let maxDias = 0;
+  let totalDias = 0;
   for (const p of merged) {
-    const dias = Math.floor((p.fin - p.inicio) / MS_DAY) + 1;
-    if (dias > maxDias) maxDias = dias;
+    totalDias += Math.floor((p.fin - p.inicio) / MS_DAY) + 1;
   }
 
-  return Math.floor(maxDias / 7);
+  return Math.floor(totalDias / 7);
 }
 
 function addMonths(date: Date, months: number): Date {
@@ -1060,7 +1058,7 @@ export default function Home() {
                             />
                             <SubCheck
                               pass={mod10CumpleSemanas}
-                              label="Mín. 52 sem. ininterrumpidas en 5 años"
+                              label="Mín. 52 sem. cotizadas en 5 años"
                               value={`${semanasEn5Anos} semanas`}
                             />
                           </div>
