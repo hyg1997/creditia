@@ -428,6 +428,81 @@ function SubCheck({
   );
 }
 
+function DetailToggle({ label, children }: { label?: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-2 pt-2 border-t border-wv-border/50">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+      >
+        <svg className={`w-3 h-3 transition-transform ${open ? "rotate-90" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+        {label ?? "Ver cómo se calculó"}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-1 text-[9px] sm:text-[10px] text-muted-foreground font-mono leading-relaxed">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StepRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div className="flex justify-between gap-4">
+      <span>{label}</span>
+      <span className={`text-right ${highlight ? "text-wv-cyan font-semibold" : ""}`}>{value}</span>
+    </div>
+  );
+}
+
+function PensionSteps({ result, label }: { result: import("@/lib/calculations/pension-scenarios").PensionCalcResult; label: string }) {
+  const s = result.steps;
+  if (!s.salarioPromedio) return null;
+  return (
+    <DetailToggle label={`Ver cálculo: ${label}`}>
+      <p className="text-muted-foreground/70 mb-1 font-sans">Datos de entrada</p>
+      <StepRow label="Salario promedio diario" value={formatMXN(s.salarioPromedio)} />
+      <StepRow label="Semanas cotizadas" value={formatInt(s.totalSemanas)} />
+      <StepRow label="Edad al retiro" value={`${s.edadRetiro} años`} />
+      <StepRow label="UMA" value={formatMXN(s.uma)} />
+      <StepRow label="SMG" value={formatMXN(s.smg)} />
+      <div className="border-t border-wv-border/30 my-1" />
+      <p className="text-muted-foreground/70 mb-1 font-sans">Cuantía</p>
+      <StepRow label="Salario en UMAs" value={`${s.salarioEnUMAs.toFixed(4)}`} />
+      <StepRow label="Cuantía básica (tabla)" value={`${(s.cuantiaBasica * 100).toFixed(2)}%`} />
+      <StepRow label="Incremento anual (tabla)" value={`${(s.cuantiaIncremento * 100).toFixed(4)}%`} />
+      <StepRow label="Años de incremento" value={`${s.incrementYears}`} />
+      <StepRow label="Método Anterior (35%+1.25%)" value={formatMXN(s.totalAnterior / 12)} />
+      <StepRow label="Método Reformado (tabla)" value={formatMXN(s.totalReformado / 12)} />
+      <StepRow label={`Cuantía usada → ${s.metodoUsado}`} value={formatMXN(s.cuantiaAnual / 12)} highlight />
+      <StepRow label="+ 11% decreto Fox" value={formatMXN(s.cuantiaAnualCon11 / 12)} />
+      <div className="border-t border-wv-border/30 my-1" />
+      <p className="text-muted-foreground/70 mb-1 font-sans">Cesantía y asignaciones</p>
+      <StepRow label={`Factor cesantía (${s.edadRetiro} años)`} value={`${(s.cesantiaFactor * 100).toFixed(0)}%`} />
+      <StepRow label="Pensión mensual cesantía" value={formatMXN(s.pensionMensualCesantia)} />
+      <StepRow label="Esposa" value={`${(s.esposaPC * 100).toFixed(0)}%`} />
+      <StepRow label="Hijos" value={`${(s.hijosPC * 100).toFixed(0)}%`} />
+      <StepRow label="Ayuda asistencial" value={`${(s.ayudaPC * 100).toFixed(0)}%`} />
+      <StepRow label="Con asignaciones" value={formatMXN(s.pensionConAsignaciones)} />
+      <StepRow label="Tope mensual" value={formatMXN(s.topeMensual)} />
+      {s.topeCase !== "00" && (
+        <StepRow label={`Tope aplicado (CASO ${s.topeCase})`} value={s.topeCase === "01" ? "Pensión > tope" : "Asignaciones reducidas"} highlight />
+      )}
+      <div className="border-t border-wv-border/30 my-1" />
+      <p className="text-muted-foreground/70 mb-1 font-sans">Resultado</p>
+      <StepRow label="Pensión mínima" value={formatMXN(s.pensionMinima)} />
+      {s.usaPensionMinima && <StepRow label="→ Se aplica pensión mínima" value="Sí" highlight />}
+      <StepRow label="Pensión bruta" value={formatMXN(result.pensionBruta)} highlight />
+      <StepRow label={`ISR (exención: ${formatMXN(s.isrExencion)})`} value={`-${formatMXN(result.isr)}`} />
+      <StepRow label="Base gravable" value={formatMXN(s.isrBaseGravable)} />
+      <StepRow label="Pensión neta" value={formatMXN(result.pensionNeta)} highlight />
+    </DetailToggle>
+  );
+}
+
 function MetricCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="bg-wv-surface rounded-xl border border-wv-border p-4">
@@ -902,47 +977,49 @@ export default function Home() {
                       <StatusBadge pass={cumpleSemanas} />
                     </div>
 
-                    <div className="rounded-lg border border-wv-border overflow-hidden">
-                      <table className="w-full text-[10px] sm:text-xs">
-                        <thead>
-                          <tr className="bg-muted/40">
-                            <th className="px-2.5 sm:px-3 py-1.5 text-left font-medium text-muted-foreground w-16">Sem.</th>
-                            <th className="px-2.5 sm:px-3 py-1.5 text-left font-medium text-muted-foreground">Edad</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {RANGOS_SEMANAS.map((r, i) => {
-                            const isActive = i === semanasRangoIndex;
-                            return (
-                              <tr
-                                key={i}
-                                className={isActive
-                                  ? "bg-wv-cyan/10 font-semibold"
-                                  : "border-t border-wv-border/50"}
-                              >
-                                <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 font-mono ${isActive ? "text-wv-cyan" : ""}`}>{formatInt(r.semanas)}</td>
-                                <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 ${isActive ? "text-wv-cyan" : "text-muted-foreground"}`}>{r.label}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
+                    <DetailToggle label="Ver tabla de semanas por edad y desglose">
+                      <div className="rounded-lg border border-wv-border overflow-hidden font-sans">
+                        <table className="w-full text-[10px] sm:text-xs">
+                          <thead>
+                            <tr className="bg-muted/40">
+                              <th className="px-2.5 sm:px-3 py-1.5 text-left font-medium text-muted-foreground w-16">Sem.</th>
+                              <th className="px-2.5 sm:px-3 py-1.5 text-left font-medium text-muted-foreground">Edad</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {RANGOS_SEMANAS.map((r, i) => {
+                              const isActive = i === semanasRangoIndex;
+                              return (
+                                <tr
+                                  key={i}
+                                  className={isActive
+                                    ? "bg-wv-cyan/10 font-semibold"
+                                    : "border-t border-wv-border/50"}
+                                >
+                                  <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 font-mono ${isActive ? "text-wv-cyan" : ""}`}>{formatInt(r.semanas)}</td>
+                                  <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 ${isActive ? "text-wv-cyan" : "text-muted-foreground"}`}>{r.label}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
 
-                    <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-                      <div className="bg-muted/60 rounded-lg p-2">
-                        <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Cotizadas</p>
-                        <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{formatInt(result.header.totalSemanasCotizadas)}</p>
+                      <div className="grid grid-cols-3 gap-1.5 sm:gap-2 mt-2 font-sans">
+                        <div className="bg-muted/60 rounded-lg p-2">
+                          <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Cotizadas</p>
+                          <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{formatInt(result.header.totalSemanasCotizadas)}</p>
+                        </div>
+                        <div className="bg-muted/60 rounded-lg p-2">
+                          <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Descontadas</p>
+                          <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5 text-wv-red">{formatInt(result.header.semanasDescontadas)}</p>
+                        </div>
+                        <div className="bg-muted/60 rounded-lg p-2">
+                          <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Reintegradas</p>
+                          <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5 text-wv-green">{formatInt(result.header.semanasReintegradas)}</p>
+                        </div>
                       </div>
-                      <div className="bg-muted/60 rounded-lg p-2">
-                        <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Descontadas</p>
-                        <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5 text-wv-red">{formatInt(result.header.semanasDescontadas)}</p>
-                      </div>
-                      <div className="bg-muted/60 rounded-lg p-2">
-                        <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Reintegradas</p>
-                        <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5 text-wv-green">{formatInt(result.header.semanasReintegradas)}</p>
-                      </div>
-                    </div>
+                    </DetailToggle>
                   </div>
                 </div>
 
@@ -963,34 +1040,48 @@ export default function Home() {
                       <StatusBadge pass={cumpleAfore} />
                     </div>
 
-                    <div className="rounded-lg border border-wv-border overflow-hidden">
-                      <table className="w-full text-[10px] sm:text-xs">
-                        <thead>
-                          <tr className="bg-muted/40">
-                            <th className="px-2.5 sm:px-3 py-1.5 text-left font-medium text-muted-foreground">Semanas</th>
-                            <th className="px-2.5 sm:px-3 py-1.5 text-right font-medium text-muted-foreground">Costo/año</th>
-                            <th className="px-2.5 sm:px-3 py-1.5 text-right font-medium text-muted-foreground">Costo/día</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {RANGOS_COSTO.map((rc, i) => {
-                            const isActive = i === costoRangoIndex;
-                            return (
-                              <tr
-                                key={i}
-                                className={isActive
-                                  ? "bg-wv-cyan/10 font-semibold"
-                                  : "border-t border-wv-border/50"}
-                              >
-                                <td className={`px-2.5 sm:px-3 py-1 ${isActive ? "text-wv-cyan" : "text-muted-foreground"}`}>{rc.label}</td>
-                                <td className={`px-2.5 sm:px-3 py-1 text-right font-mono ${isActive ? "text-wv-cyan" : ""}`}>{formatMXN(rc.costoAnual)}</td>
-                                <td className={`px-2.5 sm:px-3 py-1 text-right font-mono ${isActive ? "text-wv-cyan" : ""}`}>{formatMXN(Math.round(rc.costoAnual / 365))}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
+                    <DetailToggle label="Ver tabla de costos y cálculo del monto requerido">
+                      <div className="rounded-lg border border-wv-border overflow-hidden font-sans">
+                        <table className="w-full text-[10px] sm:text-xs">
+                          <thead>
+                            <tr className="bg-muted/40">
+                              <th className="px-2.5 sm:px-3 py-1.5 text-left font-medium text-muted-foreground">Semanas</th>
+                              <th className="px-2.5 sm:px-3 py-1.5 text-right font-medium text-muted-foreground">Costo/año</th>
+                              <th className="px-2.5 sm:px-3 py-1.5 text-right font-medium text-muted-foreground">Costo/día</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {RANGOS_COSTO.map((rc, i) => {
+                              const isActive = i === costoRangoIndex;
+                              return (
+                                <tr
+                                  key={i}
+                                  className={isActive
+                                    ? "bg-wv-cyan/10 font-semibold"
+                                    : "border-t border-wv-border/50"}
+                                >
+                                  <td className={`px-2.5 sm:px-3 py-1 ${isActive ? "text-wv-cyan" : "text-muted-foreground"}`}>{rc.label}</td>
+                                  <td className={`px-2.5 sm:px-3 py-1 text-right font-mono ${isActive ? "text-wv-cyan" : ""}`}>{formatMXN(rc.costoAnual)}</td>
+                                  <td className={`px-2.5 sm:px-3 py-1 text-right font-mono ${isActive ? "text-wv-cyan" : ""}`}>{formatMXN(Math.round(rc.costoAnual / 365))}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="mt-2 space-y-0.5">
+                        <StepRow label="Semanas cotizadas" value={formatInt(semanasTotales)} />
+                        <StepRow label="Costo anual (según rango)" value={formatMXN(costoAnual)} />
+                        <StepRow label="Costo diario (anual ÷ 365)" value={formatMXN(Math.round(costoDiario))} />
+                        <StepRow label="Días sin trabajar" value={formatInt(sinTrabajar?.dias ?? 0)} />
+                        <StepRow label={`Monto requerido (${formatInt(sinTrabajar?.dias ?? 0)}d × ${formatMXN(Math.round(costoDiario))}/d)`} value={formatMXN(montoRequerido)} highlight />
+                        <StepRow label="Saldo AFORE disponible" value={formatMXN(saldoAfore)} />
+                        {tieneCredito && descuentoCredito > 0 && (
+                          <StepRow label="Descuento crédito INFONAVIT" value={`-${formatMXN(descuentoCredito)}`} />
+                        )}
+                        <StepRow label={cumpleAfore ? "Excedente" : "Faltante"} value={formatMXN(Math.abs(saldoAfore - montoRequerido))} highlight />
+                      </div>
+                    </DetailToggle>
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
                       <div className="bg-muted/60 rounded-lg p-2">
@@ -1077,55 +1168,62 @@ export default function Home() {
                             />
                           </div>
 
-                          {/* Breakdown visual */}
                           {semanasDetail && (
-                            <div className="mt-2 pt-2 border-t border-wv-border/50 space-y-2">
-                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[9px] sm:text-[10px] text-muted-foreground">
-                                <span>
-                                  Ventana: {semanasDetail.windowStart.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
-                                  {" → "}
-                                  {semanasDetail.windowEnd.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
-                                </span>
-                                {semanasDetail.mod40Corte && (
-                                  <span className="text-amber-500">
-                                    Mod 40 recortó ventana al {semanasDetail.mod40Corte.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
+                            <DetailToggle label="Ver periodos en ventana de 5 años">
+                              <div className="space-y-2 font-sans">
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[9px] sm:text-[10px] text-muted-foreground">
+                                  <span>
+                                    Ventana: {semanasDetail.windowStart.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
+                                    {" → "}
+                                    {semanasDetail.windowEnd.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
                                   </span>
-                                )}
-                              </div>
-
-                              {semanasDetail.periodos.length > 0 && (
-                                <div className="space-y-1">
-                                  {semanasDetail.periodos.map((p, i) => {
-                                    const pct = semanasDetail.totalDias > 0 ? (p.dias / semanasDetail.totalDias) * 100 : 0;
-                                    return (
-                                      <div key={i} className="space-y-0.5">
-                                        <div className="flex items-center justify-between text-[9px] sm:text-[10px]">
-                                          <span className="text-muted-foreground">
-                                            {p.inicio.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" })}
-                                            {" → "}
-                                            {p.fin.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" })}
-                                          </span>
-                                          <span className={`font-mono font-medium ${mod10CumpleSemanas ? "text-wv-green" : "text-foreground"}`}>
-                                            {p.semanas} sem ({p.dias}d)
-                                          </span>
-                                        </div>
-                                        <div className="h-1.5 rounded-full bg-wv-border/40 overflow-hidden">
-                                          <div
-                                            className={`h-full rounded-full ${mod10CumpleSemanas ? "bg-wv-green" : "bg-wv-red"}`}
-                                            style={{ width: `${Math.max(pct, 2)}%` }}
-                                          />
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                  {!mod10CumpleSemanas && (
-                                    <p className="text-[9px] sm:text-[10px] text-wv-red mt-1">
-                                      Faltan {52 - semanasEn5Anos} semanas para cumplir el mínimo de 52
-                                    </p>
+                                  {semanasDetail.mod40Corte && (
+                                    <span className="text-amber-500">
+                                      Mod 40 recortó ventana al {semanasDetail.mod40Corte.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
+                                    </span>
                                   )}
                                 </div>
-                              )}
-                            </div>
+
+                                {semanasDetail.periodos.length > 0 && (
+                                  <div className="space-y-1">
+                                    {semanasDetail.periodos.map((p, i) => {
+                                      const pct = semanasDetail.totalDias > 0 ? (p.dias / semanasDetail.totalDias) * 100 : 0;
+                                      return (
+                                        <div key={i} className="space-y-0.5">
+                                          <div className="flex items-center justify-between text-[9px] sm:text-[10px]">
+                                            <span className="text-muted-foreground">
+                                              {p.inicio.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" })}
+                                              {" → "}
+                                              {p.fin.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" })}
+                                            </span>
+                                            <span className={`font-mono font-medium ${mod10CumpleSemanas ? "text-wv-green" : "text-foreground"}`}>
+                                              {p.semanas} sem ({p.dias}d)
+                                            </span>
+                                          </div>
+                                          <div className="h-1.5 rounded-full bg-wv-border/40 overflow-hidden">
+                                            <div
+                                              className={`h-full rounded-full ${mod10CumpleSemanas ? "bg-wv-green" : "bg-wv-red"}`}
+                                              style={{ width: `${Math.max(pct, 2)}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                    <div className="flex justify-between text-[9px] sm:text-[10px] font-mono pt-1 border-t border-wv-border/30">
+                                      <span className="text-muted-foreground">Total</span>
+                                      <span className={mod10CumpleSemanas ? "text-wv-green font-semibold" : "text-wv-red font-semibold"}>
+                                        {semanasEn5Anos} sem ({semanasDetail.totalDias}d)
+                                      </span>
+                                    </div>
+                                    {!mod10CumpleSemanas && (
+                                      <p className="text-[9px] sm:text-[10px] text-wv-red mt-1">
+                                        Faltan {52 - semanasEn5Anos} semanas para cumplir el mínimo de 52
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </DetailToggle>
                           )}
                         </div>
                       </div>
@@ -1522,35 +1620,37 @@ export default function Home() {
                           </span>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div className="rounded-xl border-2 border-wv-border bg-muted/20 p-4 text-center">
-                            <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Pension Actual</p>
-                            <p className="text-xl sm:text-2xl font-bold font-mono mt-1">{formatMXN(escenarios.pensionActual.pensionNeta)}</p>
-                            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">mensual neta</p>
+                          <div className="rounded-xl border-2 border-wv-border bg-muted/20 p-4">
+                            <div className="text-center">
+                              <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Pension Actual</p>
+                              <p className="text-xl sm:text-2xl font-bold font-mono mt-1">{formatMXN(escenarios.pensionActual.pensionNeta)}</p>
+                              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">mensual neta</p>
+                            </div>
+                            <PensionSteps result={escenarios.pensionActual} label="Actual" />
                           </div>
-                          <div className="rounded-xl border-2 border-wv-green/40 bg-wv-green/5 p-4 text-center">
-                            <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Pension Pronta</p>
-                            <p className="text-xl sm:text-2xl font-bold font-mono mt-1 text-wv-green">{formatMXN(escenarios.pensionPronta.pensionNeta)}</p>
-                            <p className="text-xs sm:text-sm font-semibold text-wv-green mt-1">+{formatMXN(escenarios.incremento1)}</p>
-                            <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">
-                              Prom: {formatMXN(escenarios.promedioE1)} · {Math.round(escenarios.mod40WeeksE1)} sem M40
-                            </p>
+                          <div className="rounded-xl border-2 border-wv-green/40 bg-wv-green/5 p-4">
+                            <div className="text-center">
+                              <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Pension Pronta</p>
+                              <p className="text-xl sm:text-2xl font-bold font-mono mt-1 text-wv-green">{formatMXN(escenarios.pensionPronta.pensionNeta)}</p>
+                              <p className="text-xs sm:text-sm font-semibold text-wv-green mt-1">+{formatMXN(escenarios.incremento1)}</p>
+                              <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">
+                                Prom: {formatMXN(escenarios.promedioE1)} · {Math.round(escenarios.mod40WeeksE1)} sem M40
+                              </p>
+                            </div>
+                            <PensionSteps result={escenarios.pensionPronta} label="Pronta" />
                           </div>
-                          <div className="rounded-xl border-2 border-wv-cyan/40 bg-wv-cyan/5 p-4 text-center">
-                            <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Pension +6 Meses</p>
-                            <p className="text-xl sm:text-2xl font-bold font-mono mt-1 text-wv-cyan">{formatMXN(escenarios.pension6Meses.pensionNeta)}</p>
-                            <p className="text-xs sm:text-sm font-semibold text-wv-cyan mt-1">+{formatMXN(escenarios.incremento2)}</p>
-                            <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">
-                              Prom: {formatMXN(escenarios.promedioE2)} · {Math.round(escenarios.mod40WeeksE2)} sem M40
-                            </p>
+                          <div className="rounded-xl border-2 border-wv-cyan/40 bg-wv-cyan/5 p-4">
+                            <div className="text-center">
+                              <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Pension +6 Meses</p>
+                              <p className="text-xl sm:text-2xl font-bold font-mono mt-1 text-wv-cyan">{formatMXN(escenarios.pension6Meses.pensionNeta)}</p>
+                              <p className="text-xs sm:text-sm font-semibold text-wv-cyan mt-1">+{formatMXN(escenarios.incremento2)}</p>
+                              <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">
+                                Prom: {formatMXN(escenarios.promedioE2)} · {Math.round(escenarios.mod40WeeksE2)} sem M40
+                              </p>
+                            </div>
+                            <PensionSteps result={escenarios.pension6Meses} label="+6 Meses" />
                           </div>
                         </div>
-                        {(escenarios.pensionPronta.isr > 0 || escenarios.pension6Meses.isr > 0) && (
-                          <div className="text-[9px] sm:text-[10px] text-muted-foreground space-y-0.5 pt-1 border-t border-wv-border/50">
-                            {escenarios.pensionActual.isr > 0 && <p>ISR Actual: {formatMXN(escenarios.pensionActual.isr)} (Bruta: {formatMXN(escenarios.pensionActual.pensionBruta)})</p>}
-                            {escenarios.pensionPronta.isr > 0 && <p>ISR Pronta: {formatMXN(escenarios.pensionPronta.isr)} (Bruta: {formatMXN(escenarios.pensionPronta.pensionBruta)})</p>}
-                            {escenarios.pension6Meses.isr > 0 && <p>ISR +6m: {formatMXN(escenarios.pension6Meses.isr)} (Bruta: {formatMXN(escenarios.pension6Meses.pensionBruta)})</p>}
-                          </div>
-                        )}
                       </div>
                     </div>
                   </section>

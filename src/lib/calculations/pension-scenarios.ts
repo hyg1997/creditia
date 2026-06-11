@@ -135,13 +135,51 @@ export interface PensionCalcResult {
   pensionBruta: number;
   isr: number;
   pensionNeta: number;
+  steps: {
+    salarioPromedio: number;
+    totalSemanas: number;
+    edadRetiro: number;
+    uma: number;
+    smg: number;
+    salarioEnUMAs: number;
+    cuantiaBasica: number;
+    cuantiaIncremento: number;
+    incrementYears: number;
+    totalAnterior: number;
+    totalReformado: number;
+    metodoUsado: "anterior" | "reformado";
+    cuantiaAnual: number;
+    cuantiaAnualCon11: number;
+    cesantiaFactor: number;
+    pensionMensualCesantia: number;
+    esposaPC: number;
+    hijosPC: number;
+    ayudaPC: number;
+    topeMensual: number;
+    topeCase: "00" | "01" | "02";
+    pensionConAsignaciones: number;
+    pensionMinima: number;
+    usaPensionMinima: boolean;
+    isrExencion: number;
+    isrBaseGravable: number;
+  };
 }
 
 function calcPension(input: PensionCalcInput): PensionCalcResult {
   const { salarioPromedio, totalSemanas, edadRetiro, retirementDate, esposa, hijos } = input;
 
+  const emptySteps = {
+    salarioPromedio: 0, totalSemanas: 0, edadRetiro: 0, uma: 0, smg: 0,
+    salarioEnUMAs: 0, cuantiaBasica: 0, cuantiaIncremento: 0, incrementYears: 0,
+    totalAnterior: 0, totalReformado: 0, metodoUsado: "anterior" as const,
+    cuantiaAnual: 0, cuantiaAnualCon11: 0, cesantiaFactor: 0, pensionMensualCesantia: 0,
+    esposaPC: 0, hijosPC: 0, ayudaPC: 0, topeMensual: 0, topeCase: "00" as const,
+    pensionConAsignaciones: 0, pensionMinima: 0, usaPensionMinima: false,
+    isrExencion: 0, isrBaseGravable: 0,
+  };
+
   if (totalSemanas < 500 || salarioPromedio <= 0) {
-    return { pensionBruta: 0, isr: 0, pensionNeta: 0 };
+    return { pensionBruta: 0, isr: 0, pensionNeta: 0, steps: emptySteps };
   }
 
   const year = retirementDate.getUTCFullYear();
@@ -152,16 +190,15 @@ function calcPension(input: PensionCalcInput): PensionCalcResult {
   const cuantia = lookupCuantia(salarioEnUMAs);
   const incrementYears = calcIncrementYears(totalSemanas);
 
-  // Method 1: Anterior Ley 73 (flat 35% + 1.25%)
   const anteriorBasica = salarioPromedio * 365 * 0.35;
   const anteriorInc = incrementYears * salarioPromedio * 0.0125 * 365;
   const totalAnterior = anteriorBasica + anteriorInc;
 
-  // Method 2: Reformado (table lookup)
   const reformadoBasica = salarioPromedio * 365 * cuantia.basica;
   const reformadoInc = incrementYears * salarioPromedio * 365 * cuantia.incremento;
   const totalReformado = reformadoBasica + reformadoInc;
 
+  const metodoUsado = totalAnterior >= totalReformado ? "anterior" as const : "reformado" as const;
   const cuantiaAnual = Math.max(totalAnterior, totalReformado);
   const cuantiaAnualCon11 = cuantiaAnual * 1.11;
 
@@ -171,7 +208,6 @@ function calcPension(input: PensionCalcInput): PensionCalcResult {
 
   const esposaPC = esposa ? 0.15 : 0;
   const hijosPC = hijos > 0 ? hijos * 0.10 : 0;
-  // Ayuda asistencial: 15% if alone, 10% if only parents, 0% if spouse or children
   let ayudaPC = 0;
   if (esposaPC === 0 && hijosPC === 0) {
     ayudaPC = 0.15;
@@ -181,29 +217,44 @@ function calcPension(input: PensionCalcInput): PensionCalcResult {
   const topeMensual = salarioPromedio * 365 / 12 * 1.11;
 
   let pensionTotal: number;
+  let topeCase: "00" | "01" | "02" = "00";
   const rawTotal = pensionMensualCesantia * (1 + totalAllowPC);
 
   if (rawTotal <= topeMensual) {
     pensionTotal = rawTotal;
   } else if (pensionMensualCesantia > topeMensual) {
-    // CASE 01: pension alone > tope - reduce everything proportionally
     pensionTotal = pensionMensualCesantia;
+    topeCase = "01";
   } else {
-    // CASE 02: pension ok but with allowances exceeds tope
     if (totalAllowPC > 0) {
       const factor = ((topeMensual / pensionMensualCesantia) - 1) / totalAllowPC;
       pensionTotal = pensionMensualCesantia * (1 + totalAllowPC * factor);
     } else {
       pensionTotal = pensionMensualCesantia;
     }
+    topeCase = "02";
   }
 
   const pensionMinima = smg * 365 / 12 * 1.11;
+  const usaPensionMinima = pensionTotal < pensionMinima;
   const pensionBruta = Math.max(pensionTotal, pensionMinima);
+  const isrExencion = 15 * uma * 30.4;
+  const isrBaseGravable = Math.max(0, pensionBruta - isrExencion);
   const isr = calcISR(pensionBruta, uma);
   const pensionNeta = pensionBruta - isr;
 
-  return { pensionBruta, isr, pensionNeta };
+  return {
+    pensionBruta, isr, pensionNeta,
+    steps: {
+      salarioPromedio, totalSemanas, edadRetiro, uma, smg,
+      salarioEnUMAs, cuantiaBasica: cuantia.basica, cuantiaIncremento: cuantia.incremento,
+      incrementYears, totalAnterior, totalReformado, metodoUsado,
+      cuantiaAnual, cuantiaAnualCon11, cesantiaFactor, pensionMensualCesantia,
+      esposaPC, hijosPC, ayudaPC, topeMensual, topeCase,
+      pensionConAsignaciones: rawTotal, pensionMinima, usaPensionMinima,
+      isrExencion, isrBaseGravable,
+    },
+  };
 }
 
 function recalcPromedio(
