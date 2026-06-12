@@ -799,98 +799,85 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Rangos de Edad */}
+            {/* Rangos de Edad y Costos — unified */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Rangos de Edad</p>
-                <button
-                  onClick={() => {
-                    const lastEdad = rangosEdad.length > 0 ? rangosEdad[rangosEdad.length - 1].edadMinima + 1 : 60.5;
-                    setRangosEdad(prev => [...prev, { semanas: Math.max(0, (prev[prev.length - 1]?.semanas ?? 750) - 30), edadMinima: lastEdad }]);
-                    setCostoMatrix(prev => [...prev, prev.length > 0 ? [...prev[prev.length - 1]] : [0]]);
-                  }}
-                  className="text-[10px] sm:text-xs text-wv-cyan hover:text-wv-cyan/80 font-medium"
-                >
-                  + Agregar rango
-                </button>
-              </div>
-              <div className="space-y-1.5">
-                {rangosEdad.map((rango, idx) => (
-                  <div key={idx} className="bg-background rounded-lg border border-wv-border/50 px-3 py-2 flex items-center gap-2 sm:gap-3">
-                    <div className="w-16 sm:w-20 shrink-0">
-                      {idx === 0 ? (
-                        <p className="text-[10px] sm:text-xs text-muted-foreground py-1.5">Base</p>
-                      ) : (
-                        <DecimalInput value={rango.edadMinima} onChange={(v) => setRangosEdad(prev => { const n = [...prev]; n[idx] = { ...n[idx], edadMinima: v }; return n; })} />
-                      )}
-                    </div>
-                    <p className="text-[9px] sm:text-[10px] text-muted-foreground shrink-0">años →</p>
-                    <div className="w-20 sm:w-24 shrink-0">
-                      <NumericInput value={rango.semanas} onChange={(v) => setRangosEdad(prev => { const n = [...prev]; n[idx] = { ...n[idx], semanas: v }; return n; })} />
-                    </div>
-                    <p className="text-[9px] sm:text-[10px] text-muted-foreground shrink-0">sem.</p>
-                    <p className="flex-1 text-[10px] sm:text-xs text-muted-foreground truncate">{rangoEdadLabel(rangosEdad, idx)}</p>
-                    {rangosEdad.length > 1 && (
-                      <button
-                        onClick={() => {
-                          setRangosEdad(prev => prev.filter((_, i) => i !== idx));
-                          setCostoMatrix(prev => prev.filter((_, i) => i !== idx));
-                          if (activeEdadTab >= rangosEdad.length - 1) setActiveEdadTab(Math.max(0, rangosEdad.length - 2));
-                        }}
-                        className="text-wv-red/50 hover:text-wv-red p-0.5 shrink-0"
-                      >
-                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Costos AFORE por Edad */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Costos AFORE por Edad</p>
-                <button
-                  onClick={() => {
-                    setCostoTiers(prev => [...prev, 0]);
-                    setCostoMatrix(prev => prev.map(row => [...row, 0]));
-                  }}
-                  className="text-[10px] sm:text-xs text-wv-cyan hover:text-wv-cyan/80 font-medium"
-                >
-                  + Agregar tier
-                </button>
-              </div>
-
-              {/* Age range tabs */}
-              <div className="flex gap-1 bg-background rounded-lg border border-wv-border/50 p-0.5 mb-2 overflow-x-auto">
+              {/* Tabs + add/remove */}
+              <div className="flex items-center gap-1 mb-2 overflow-x-auto">
                 {rangosEdad.map((_, idx) => (
                   <button
                     key={idx}
                     onClick={() => setActiveEdadTab(idx)}
-                    className={`shrink-0 px-2 sm:px-2.5 py-1 rounded-md text-[9px] sm:text-[10px] font-medium transition-colors ${
+                    className={`shrink-0 px-2 sm:px-2.5 py-1.5 rounded-lg text-[9px] sm:text-[10px] font-medium transition-colors border ${
                       activeEdadTab === idx
-                        ? "bg-wv-cyan/10 text-wv-cyan"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                        ? "bg-wv-cyan/10 text-wv-cyan border-wv-cyan/30"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/40 border-transparent"
                     }`}
                   >
                     {rangoEdadLabel(rangosEdad, idx)}
                   </button>
                 ))}
+                <button
+                  onClick={() => {
+                    const lastEdad = rangosEdad.length > 0 ? rangosEdad[rangosEdad.length - 1].edadMinima + 1 : 60.5;
+                    setRangosEdad(prev => [...prev, { semanas: Math.max(0, (prev[prev.length - 1]?.semanas ?? 750) - 30), edadMinima: lastEdad }]);
+                    setCostoMatrix(prev => [...prev, prev.length > 0 ? [...prev[prev.length - 1]] : costoTiers.map(() => 0)]);
+                    setActiveEdadTab(rangosEdad.length);
+                  }}
+                  className="shrink-0 px-2 py-1.5 rounded-lg text-[9px] sm:text-[10px] font-medium text-wv-cyan hover:bg-wv-cyan/10 border border-dashed border-wv-cyan/30 transition-colors"
+                >
+                  + Rango
+                </button>
               </div>
 
+              {/* Active range config */}
               <div className="bg-background rounded-lg border border-wv-border/50 overflow-hidden">
-                <div className="px-3 py-2 border-b border-wv-border/30 flex items-center justify-between">
-                  <p className="text-[9px] sm:text-[10px] text-muted-foreground">
-                    <span className="text-foreground font-medium">{rangoEdadLabel(rangosEdad, activeEdadTab)}</span>
-                  </p>
+                {/* Range header: edad + semanas + delete */}
+                <div className="px-3 py-2.5 border-b border-wv-border/30 flex items-center gap-2 sm:gap-3 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-[9px] sm:text-[10px] text-muted-foreground shrink-0">Edad min:</p>
+                    <div className="w-16">
+                      {activeEdadTab === 0 ? (
+                        <p className="text-[10px] sm:text-xs text-muted-foreground py-1.5 text-center">—</p>
+                      ) : (
+                        <DecimalInput
+                          value={rangosEdad[activeEdadTab]?.edadMinima ?? 0}
+                          onChange={(v) => setRangosEdad(prev => { const n = [...prev]; n[activeEdadTab] = { ...n[activeEdadTab], edadMinima: v }; return n; })}
+                        />
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-[9px] sm:text-[10px] text-muted-foreground shrink-0">Sem. min:</p>
+                    <div className="w-20">
+                      <NumericInput
+                        value={rangosEdad[activeEdadTab]?.semanas ?? 0}
+                        onChange={(v) => setRangosEdad(prev => { const n = [...prev]; n[activeEdadTab] = { ...n[activeEdadTab], semanas: v }; return n; })}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex-1" />
                   <button
                     onClick={() => setCostoMatrix(prev => { const src = prev[activeEdadTab]; if (!src) return prev; return prev.map(() => [...src]); })}
-                    className="text-[9px] sm:text-[10px] text-wv-cyan hover:text-wv-cyan/80 font-medium"
+                    className="text-[9px] sm:text-[10px] text-wv-cyan hover:text-wv-cyan/80 font-medium shrink-0"
                   >
-                    Aplicar a todos
+                    Aplicar costos a todos
                   </button>
+                  {rangosEdad.length > 1 && (
+                    <button
+                      onClick={() => {
+                        setRangosEdad(prev => prev.filter((_, i) => i !== activeEdadTab));
+                        setCostoMatrix(prev => prev.filter((_, i) => i !== activeEdadTab));
+                        setActiveEdadTab(Math.max(0, activeEdadTab - 1));
+                      }}
+                      className="text-wv-red/50 hover:text-wv-red p-0.5 shrink-0"
+                      title="Eliminar rango"
+                    >
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                    </button>
+                  )}
                 </div>
+
+                {/* Cost tiers */}
                 <div className="divide-y divide-wv-border/30">
                   {costoTiers.map((tier, tIdx) => (
                     <div key={tIdx} className="px-3 py-1.5 flex items-center gap-2">
@@ -920,6 +907,17 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
+                <div className="px-3 py-1.5 border-t border-wv-border/30">
+                  <button
+                    onClick={() => {
+                      setCostoTiers(prev => [...prev, 0]);
+                      setCostoMatrix(prev => prev.map(row => [...row, 0]));
+                    }}
+                    className="text-[9px] sm:text-[10px] text-wv-cyan hover:text-wv-cyan/80 font-medium"
+                  >
+                    + Agregar tier
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -931,9 +929,10 @@ export default function Home() {
                   <thead>
                     <tr className="bg-muted/40">
                       <th className="px-2 py-1 text-left font-medium text-muted-foreground sticky left-0 bg-muted/40">Semanas</th>
-                      {rangosEdad.map((_, eIdx) => (
+                      {rangosEdad.map((r, eIdx) => (
                         <th key={eIdx} className="px-2 py-1 text-right font-medium text-muted-foreground whitespace-nowrap">
-                          {rangoEdadLabel(rangosEdad, eIdx)}
+                          <div>{rangoEdadLabel(rangosEdad, eIdx)}</div>
+                          <div className="font-mono text-[7px] sm:text-[8px]">{formatInt(r.semanas)} sem</div>
                         </th>
                       ))}
                     </tr>
