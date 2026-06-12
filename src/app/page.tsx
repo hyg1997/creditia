@@ -694,6 +694,22 @@ export default function Home() {
   const asesoriaFuturoCumple =
     asesoriaFuturoCumpleEdad && asesoriaFuturoCumpleMeses;
 
+  // Art. 150: Conservación de derechos = 25% de semanas cotizadas (mín 52 sem = 1 año)
+  const semanasConservacion = Math.max(52, Math.floor(semanasTotales * 0.25));
+  const diasConservacion = semanasConservacion * 7;
+  const perdioDerechos = diasSinCotizar > diasConservacion;
+
+  // Art. 151: Recuperación — semanas nuevas requeridas según tiempo desde pérdida
+  const diasDesdePerdida = Math.max(0, diasSinCotizar - diasConservacion);
+  const anosDesdePerdida = diasDesdePerdida / 365;
+  const semanasNuevasRequeridas = anosDesdePerdida <= 3 ? 0 : anosDesdePerdida <= 6 ? 26 : 52;
+
+  // Filtros de negocio para financiamiento de recuperación
+  const recupCumpleEdad = edad >= 59;
+  const recupCumpleSemanas = semanasTotales >= 450;
+  const recupCumpleAfore = saldoAfore >= 80000;
+  const recupAcredita = perdioDerechos && recupCumpleEdad && recupCumpleSemanas && recupCumpleAfore;
+
   const initials = result?.header.nombre
     ? result.header.nombre
         .split(" ")
@@ -1115,6 +1131,7 @@ export default function Home() {
               const pasaFiltros = isLey73 && cumpleSemanas && cumpleAfore && cumpleModalidad;
               const acreditaAhora = pasaFiltros && asesoriaAhoraCumple;
               const acreditaFuturo = pasaFiltros && asesoriaFuturoCumple;
+              const acreditaRecuperacion = isLey73 && !acreditaAhora && !acreditaFuturo && recupAcredita;
 
               if (!isLey73) {
                 return (
@@ -1162,6 +1179,24 @@ export default function Home() {
                           {!asesoriaAhoraCumple && (
                             <span> — No acredita Ahora: {!asesoriaAhoraCumpleEdad ? `necesita 60 años (tiene ${edad})` : `necesita +12 meses sin cotizar (tiene ${mesesSinCotizar})`}</span>
                           )}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (acreditaRecuperacion) {
+                return (
+                  <div className="rounded-xl sm:rounded-[16px] border-2 border-amber-500/40 bg-gradient-to-r from-amber-500/10 to-wv-surface px-4 sm:px-6 py-3 sm:py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="shrink-0 h-10 w-10 rounded-full bg-amber-500/10 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /><polyline points="21 3 21 8 16 8" /></svg>
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm sm:text-lg text-amber-500">Acredita Recuperación de Derechos</p>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
+                          Perdió derechos — requiere {semanasNuevasRequeridas > 0 ? `${semanasNuevasRequeridas} semanas nuevas (Art. 151)` : "reingreso inmediato"} para recuperar
                         </p>
                       </div>
                     </div>
@@ -1576,6 +1611,111 @@ export default function Home() {
                           />
                         </div>
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Conservación y Recuperación de Derechos — Art. 150/151 */}
+                {edadInfo && isLey73 && (
+                  <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
+                    <div className={`border-l-4 ${perdioDerechos ? "border-l-amber-500" : "border-l-wv-green"} px-3.5 sm:px-4 py-2.5 sm:py-3 space-y-2 sm:space-y-2.5`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium text-xs sm:text-sm">Conservación de Derechos</p>
+                          <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 leading-tight">
+                            Art. 150 — 25% de semanas cotizadas = {formatInt(semanasConservacion)} sem ({formatDiasCompleto(diasConservacion)})
+                          </p>
+                        </div>
+                        <StatusBadge
+                          pass={!perdioDerechos}
+                          labelPass="Vigente"
+                          labelFail="Perdió derechos"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
+                        <div className="bg-muted/60 rounded-lg p-2">
+                          <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Conservación</p>
+                          <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{formatDiasCompleto(diasConservacion)}</p>
+                          <p className="text-[9px] text-muted-foreground">{formatInt(semanasConservacion)} sem</p>
+                        </div>
+                        <div className="bg-muted/60 rounded-lg p-2">
+                          <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Sin cotizar</p>
+                          <p className={`text-xs sm:text-sm font-semibold font-mono mt-0.5 ${perdioDerechos ? "text-amber-500" : ""}`}>
+                            {sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : "0d"}
+                          </p>
+                          <p className="text-[9px] text-muted-foreground">{formatInt(diasSinCotizar)} días</p>
+                        </div>
+                      </div>
+
+                      {perdioDerechos && (
+                        <>
+                          <div className="rounded-lg p-2.5 border border-amber-500/20 bg-amber-500/5">
+                            <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Art. 151 — Recuperación</p>
+                            <p className="text-xs sm:text-sm font-semibold mt-0.5 text-amber-500">
+                              {semanasNuevasRequeridas === 0
+                                ? "Reingreso inmediato — se reconocen todas las semanas"
+                                : `${semanasNuevasRequeridas} semanas nuevas requeridas`}
+                            </p>
+                            <p className="text-[9px] text-muted-foreground mt-0.5">
+                              {anosDesdePerdida <= 3
+                                ? "Menos de 3 años desde pérdida — reconocimiento inmediato al reingresar"
+                                : anosDesdePerdida <= 6
+                                  ? "Entre 3 y 6 años — reconocimiento tras 26 semanas nuevas (≈6 meses)"
+                                  : "Más de 6 años — reconocimiento tras 52 semanas nuevas (≈1 año)"}
+                            </p>
+                          </div>
+
+                          <div className={`rounded-xl overflow-hidden border-2 ${recupAcredita ? "border-amber-500/40 bg-gradient-to-br from-wv-surface to-amber-500/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}>
+                            <div className="px-3 sm:px-4 py-2.5 sm:py-3 space-y-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-xs sm:text-sm">Financiamiento Recuperación</p>
+                                  <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">Reingreso vía Mod 10</p>
+                                </div>
+                                <StatusBadge
+                                  pass={recupAcredita}
+                                  labelPass="Acredita"
+                                  labelFail="No acredita"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <SubCheck
+                                  pass={recupCumpleEdad}
+                                  label="Edad min. 59"
+                                  value={`${edad} años`}
+                                />
+                                <SubCheck
+                                  pass={recupCumpleSemanas}
+                                  label="Min. 450 semanas"
+                                  value={`${formatInt(semanasTotales)} semanas`}
+                                />
+                                <SubCheck
+                                  pass={recupCumpleAfore}
+                                  label="AFORE min. $80,000"
+                                  value={formatMXN(saldoAfore)}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      <DetailToggle label="Ver cálculo de conservación">
+                        <StepRow label="Semanas cotizadas" value={formatInt(semanasTotales)} />
+                        <StepRow label="25% (Art. 150)" value={`${formatInt(semanasTotales)} × 0.25 = ${formatInt(Math.floor(semanasTotales * 0.25))}`} />
+                        <StepRow label="Mínimo legal" value="52 semanas (1 año)" />
+                        <StepRow label="Conservación aplicada" value={`${formatInt(semanasConservacion)} sem = ${formatDiasCompleto(diasConservacion)}`} highlight />
+                        <StepRow label="Días sin cotizar" value={formatInt(diasSinCotizar)} />
+                        <StepRow label={perdioDerechos ? "Excede conservación por" : "Margen restante"} value={formatDiasCompleto(Math.abs(diasConservacion - diasSinCotizar))} highlight />
+                        {perdioDerechos && (
+                          <>
+                            <div className="border-t border-wv-border/30 my-1" />
+                            <StepRow label="Tiempo desde pérdida" value={`${formatDiasCompleto(diasDesdePerdida)} (${Math.floor(anosDesdePerdida * 10) / 10} años)`} />
+                            <StepRow label="Semanas nuevas (Art. 151)" value={`${semanasNuevasRequeridas} semanas`} highlight />
+                          </>
+                        )}
+                      </DetailToggle>
                     </div>
                   </div>
                 )}
