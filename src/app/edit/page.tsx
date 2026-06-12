@@ -23,17 +23,17 @@ const DEFAULT_COSTOS: Omit<ReglasCosto, "id">[] = [
   { min_semanas: 0, costo_anual: 100000, label: "< 1,000", orden: 4 },
 ];
 
-function InputField({
+function NumericInput({
   label,
   value,
   onChange,
-  type = "text",
+  prefix,
   className = "",
 }: {
   label: string;
-  value: string | number;
-  onChange: (v: string) => void;
-  type?: string;
+  value: number;
+  onChange: (v: number) => void;
+  prefix?: string;
   className?: string;
 }) {
   return (
@@ -41,14 +41,42 @@ function InputField({
       <label className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium block mb-1">
         {label}
       </label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-wv-border bg-background px-3 py-1.5 text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-wv-cyan focus:border-transparent"
-      />
+      <div className="relative">
+        {prefix && <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{prefix}</span>}
+        <input
+          type="text"
+          inputMode="numeric"
+          value={value ? formatInt(value) : ""}
+          onChange={(e) => {
+            const raw = e.target.value.replace(/[^0-9]/g, "");
+            onChange(raw ? parseInt(raw) : 0);
+          }}
+          placeholder="0"
+          className={`w-full rounded-lg border border-wv-border bg-background ${prefix ? "pl-6" : "px-3"} pr-3 py-1.5 text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-wv-cyan focus:border-transparent`}
+        />
+      </div>
     </div>
   );
+}
+
+function generateSemanasLabels(rows: { semanas: number; orden: number }[]): string[] {
+  const sorted = [...rows].sort((a, b) => a.orden - b.orden);
+  return sorted.map((_, i) => {
+    const age = 60.5 + i;
+    if (i === 0) return `Hasta ${age} años`;
+    if (i === sorted.length - 1) return `Más de ${age} años`;
+    return `${age} — ${age + 1} años`;
+  });
+}
+
+function generateCostoLabels(rows: { min_semanas: number; orden: number }[]): string[] {
+  const sorted = [...rows].sort((a, b) => a.orden - b.orden);
+  return sorted.map((row, i) => {
+    if (i === 0) return `${formatInt(row.min_semanas)}+`;
+    const prevMin = sorted[i - 1].min_semanas;
+    if (row.min_semanas === 0) return `< ${formatInt(prevMin)}`;
+    return `${formatInt(row.min_semanas)} — ${formatInt(prevMin - 1)}`;
+  });
 }
 
 type EditSemanas = { id?: number; semanas: number; label: string; orden: number };
@@ -113,15 +141,18 @@ export default function EditPage() {
         return;
       }
 
+      const semLabels = generateSemanasLabels(semanasRows);
+      const cosLabels = generateCostoLabels(costoRows);
+
       await supabase.from("reglas_semanas").delete().neq("id", 0);
       const { error: semErr } = await supabase.from("reglas_semanas").insert(
-        semanasRows.map(({ semanas, label, orden }) => ({ semanas, label, orden }))
+        semanasRows.map(({ semanas, orden }, i) => ({ semanas, label: semLabels[i], orden }))
       );
       if (semErr) throw semErr;
 
       await supabase.from("reglas_costo").delete().neq("id", 0);
       const { error: cosErr } = await supabase.from("reglas_costo").insert(
-        costoRows.map(({ min_semanas, costo_anual, label, orden }) => ({ min_semanas, costo_anual, label, orden }))
+        costoRows.map(({ min_semanas, costo_anual, orden }, i) => ({ min_semanas, costo_anual, label: cosLabels[i], orden }))
       );
       if (cosErr) throw cosErr;
 
@@ -135,29 +166,24 @@ export default function EditPage() {
     }
   }, [semanasRows, costoRows, supabaseConnected]);
 
-  const updateSemanas = (idx: number, field: keyof EditSemanas, value: string) => {
+  const updateSemanasNum = (idx: number, field: "semanas", value: number) => {
     setSemanasRows((prev) => {
       const next = [...prev];
-      if (field === "semanas" || field === "orden") {
-        (next[idx] as Record<string, unknown>)[field] = parseInt(value) || 0;
-      } else {
-        (next[idx] as Record<string, unknown>)[field] = value;
-      }
+      next[idx] = { ...next[idx], [field]: value };
       return next;
     });
   };
 
-  const updateCosto = (idx: number, field: keyof EditCosto, value: string) => {
+  const updateCostoNum = (idx: number, field: "min_semanas" | "costo_anual", value: number) => {
     setCostoRows((prev) => {
       const next = [...prev];
-      if (field === "min_semanas" || field === "costo_anual" || field === "orden") {
-        (next[idx] as Record<string, unknown>)[field] = parseInt(value) || 0;
-      } else {
-        (next[idx] as Record<string, unknown>)[field] = value;
-      }
+      next[idx] = { ...next[idx], [field]: value };
       return next;
     });
   };
+
+  const semanasLabels = generateSemanasLabels(semanasRows);
+  const costoLabels = generateCostoLabels(costoRows);
 
   const addSemanasRow = () => {
     setSemanasRows((prev) => [...prev, { semanas: 0, label: "", orden: prev.length }]);
@@ -236,19 +262,18 @@ export default function EditPage() {
               <div className="space-y-2">
                 {semanasRows.map((row, idx) => (
                   <div key={idx} className="bg-wv-surface rounded-xl border border-wv-border px-4 py-3 flex items-end gap-3">
-                    <InputField
+                    <NumericInput
                       label="Semanas Min."
                       value={row.semanas}
-                      onChange={(v) => updateSemanas(idx, "semanas", v)}
-                      type="number"
-                      className="w-28"
+                      onChange={(v) => updateSemanasNum(idx, "semanas", v)}
+                      className="w-32"
                     />
-                    <InputField
-                      label="Rango de Edad"
-                      value={row.label}
-                      onChange={(v) => updateSemanas(idx, "label", v)}
-                      className="flex-1"
-                    />
+                    <div className="flex-1">
+                      <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Rango de Edad</p>
+                      <p className="px-3 py-1.5 text-xs sm:text-sm text-muted-foreground bg-muted/40 rounded-lg border border-wv-border/50">
+                        {semanasLabels[idx]}
+                      </p>
+                    </div>
                     <button
                       onClick={() => removeSemanasRow(idx)}
                       className="text-wv-red/60 hover:text-wv-red p-1.5 mb-0.5"
@@ -281,26 +306,25 @@ export default function EditPage() {
               <div className="space-y-2">
                 {costoRows.map((row, idx) => (
                   <div key={idx} className="bg-wv-surface rounded-xl border border-wv-border px-4 py-3 flex items-end gap-3">
-                    <InputField
+                    <NumericInput
                       label="Semanas Min."
                       value={row.min_semanas}
-                      onChange={(v) => updateCosto(idx, "min_semanas", v)}
-                      type="number"
-                      className="w-28"
-                    />
-                    <InputField
-                      label="Costo Anual"
-                      value={row.costo_anual}
-                      onChange={(v) => updateCosto(idx, "costo_anual", v)}
-                      type="number"
+                      onChange={(v) => updateCostoNum(idx, "min_semanas", v)}
                       className="w-32"
                     />
-                    <InputField
-                      label="Etiqueta"
-                      value={row.label}
-                      onChange={(v) => updateCosto(idx, "label", v)}
-                      className="flex-1"
+                    <NumericInput
+                      label="Costo Anual"
+                      value={row.costo_anual}
+                      onChange={(v) => updateCostoNum(idx, "costo_anual", v)}
+                      prefix="$"
+                      className="w-36"
                     />
+                    <div className="flex-1">
+                      <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Etiqueta</p>
+                      <p className="px-3 py-1.5 text-xs sm:text-sm text-muted-foreground bg-muted/40 rounded-lg border border-wv-border/50">
+                        {costoLabels[idx]}
+                      </p>
+                    </div>
                     <button
                       onClick={() => removeCostoRow(idx)}
                       className="text-wv-red/60 hover:text-wv-red p-1.5 mb-0.5"
