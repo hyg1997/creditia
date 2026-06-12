@@ -3,25 +3,21 @@
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { supabase, type ReglasSemanas, type ReglasCosto } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { formatMXN, formatInt } from "@/lib/formatters";
 
-const DEFAULT_SEMANAS: Omit<ReglasSemanas, "id">[] = [
-  { semanas: 900, label: "Hasta 60.5 años", orden: 0 },
-  { semanas: 870, label: "60.5 — 61.5 años", orden: 1 },
-  { semanas: 840, label: "61.5 — 62.5 años", orden: 2 },
-  { semanas: 810, label: "62.5 — 63.5 años", orden: 3 },
-  { semanas: 780, label: "63.5 — 64.5 años", orden: 4 },
-  { semanas: 750, label: "Mas de 64.5 años", orden: 5 },
+const DEFAULT_SEMANAS = [
+  { semanas: 900, orden: 0 },
+  { semanas: 870, orden: 1 },
+  { semanas: 840, orden: 2 },
+  { semanas: 810, orden: 3 },
+  { semanas: 780, orden: 4 },
+  { semanas: 750, orden: 5 },
 ];
 
-const DEFAULT_COSTOS: Omit<ReglasCosto, "id">[] = [
-  { min_semanas: 1700, costo_anual: 60000, label: "1,700+", orden: 0 },
-  { min_semanas: 1450, costo_anual: 70000, label: "1,450 — 1,699", orden: 1 },
-  { min_semanas: 1200, costo_anual: 80000, label: "1,200 — 1,449", orden: 2 },
-  { min_semanas: 1000, costo_anual: 90000, label: "1,000 — 1,199", orden: 3 },
-  { min_semanas: 0, costo_anual: 100000, label: "< 1,000", orden: 4 },
-];
+const DEFAULT_TIERS = [1700, 1450, 1200, 1000, 0];
+
+const DEFAULT_COSTO = [60000, 70000, 80000, 90000, 100000];
 
 function NumericInput({
   label,
@@ -30,7 +26,7 @@ function NumericInput({
   prefix,
   className = "",
 }: {
-  label: string;
+  label?: string;
   value: number;
   onChange: (v: number) => void;
   prefix?: string;
@@ -38,9 +34,11 @@ function NumericInput({
 }) {
   return (
     <div className={className}>
-      <label className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium block mb-1">
-        {label}
-      </label>
+      {label && (
+        <label className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium block mb-1">
+          {label}
+        </label>
+      )}
       <div className="relative">
         {prefix && <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{prefix}</span>}
         <input
@@ -59,36 +57,41 @@ function NumericInput({
   );
 }
 
-function generateSemanasLabels(rows: { semanas: number; orden: number }[]): string[] {
-  const sorted = [...rows].sort((a, b) => a.orden - b.orden);
-  return sorted.map((_, i) => {
+function generateSemanasLabels(count: number): string[] {
+  return Array.from({ length: count }, (_, i) => {
     const age = 60.5 + i;
     if (i === 0) return `Hasta ${age} años`;
-    if (i === sorted.length - 1) return `Más de ${age} años`;
+    if (i === count - 1) return `Más de ${age} años`;
     return `${age} — ${age + 1} años`;
   });
 }
 
-function generateCostoLabels(rows: { min_semanas: number; orden: number }[]): string[] {
-  const sorted = [...rows].sort((a, b) => a.orden - b.orden);
-  return sorted.map((row, i) => {
-    if (i === 0) return `${formatInt(row.min_semanas)}+`;
-    const prevMin = sorted[i - 1].min_semanas;
-    if (row.min_semanas === 0) return `< ${formatInt(prevMin)}`;
-    return `${formatInt(row.min_semanas)} — ${formatInt(prevMin - 1)}`;
-  });
+function tierLabel(tiers: number[], idx: number): string {
+  const min = tiers[idx];
+  if (idx === 0) return `${formatInt(min)}+`;
+  const prevMin = tiers[idx - 1];
+  if (min === 0) return `< ${formatInt(prevMin)}`;
+  return `${formatInt(min)} — ${formatInt(prevMin - 1)}`;
 }
 
-type EditSemanas = { id?: number; semanas: number; label: string; orden: number };
-type EditCosto = { id?: number; min_semanas: number; costo_anual: number; label: string; orden: number };
+type EditSemanas = { id?: number; semanas: number; orden: number };
 
 export default function EditPage() {
   const [semanasRows, setSemanasRows] = useState<EditSemanas[]>([]);
-  const [costoRows, setCostoRows] = useState<EditCosto[]>([]);
+  const [costoTiers, setCostoTiers] = useState<number[]>([]);
+  // costoMatrix[edadIdx][tierIdx] = costo_anual
+  const [costoMatrix, setCostoMatrix] = useState<number[][]>([]);
+  const [activeEdadTab, setActiveEdadTab] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [supabaseConnected, setSupabaseConnected] = useState(false);
+
+  function initDefaults() {
+    setSemanasRows(DEFAULT_SEMANAS.map((s, i) => ({ ...s, id: i })));
+    setCostoTiers([...DEFAULT_TIERS]);
+    setCostoMatrix(DEFAULT_SEMANAS.map(() => [...DEFAULT_COSTO]));
+  }
 
   useEffect(() => {
     loadData();
@@ -99,106 +102,92 @@ export default function EditPage() {
     try {
       if (!supabase) {
         setSupabaseConnected(false);
-        setSemanasRows(DEFAULT_SEMANAS.map((s, i) => ({ ...s, id: i })));
-        setCostoRows(DEFAULT_COSTOS.map((c, i) => ({ ...c, id: i })));
+        initDefaults();
         return;
       }
-
-      const { data: semanas, error: semError } = await supabase
-        .from("reglas_semanas")
-        .select("*")
-        .order("orden");
-
-      const { data: costos, error: cosError } = await supabase
-        .from("reglas_costo")
-        .select("*")
-        .order("orden");
-
-      if (semError || cosError) {
-        setSupabaseConnected(false);
-        setSemanasRows(DEFAULT_SEMANAS.map((s, i) => ({ ...s, id: i })));
-        setCostoRows(DEFAULT_COSTOS.map((c, i) => ({ ...c, id: i })));
-      } else {
-        setSupabaseConnected(true);
-        setSemanasRows(semanas?.length ? semanas : DEFAULT_SEMANAS.map((s) => ({ ...s })));
-        setCostoRows(costos?.length ? costos : DEFAULT_COSTOS.map((c) => ({ ...c })));
-      }
+      // TODO: load from supabase once schema supports matrix
+      setSupabaseConnected(false);
+      initDefaults();
     } catch {
       setSupabaseConnected(false);
-      setSemanasRows(DEFAULT_SEMANAS.map((s, i) => ({ ...s, id: i })));
-      setCostoRows(DEFAULT_COSTOS.map((c, i) => ({ ...c, id: i })));
+      initDefaults();
     } finally {
       setLoading(false);
     }
   }
+
+  const semanasLabels = generateSemanasLabels(semanasRows.length);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
     setStatus(null);
     try {
       if (!supabaseConnected || !supabase) {
-        setStatus({ type: "error", message: "Supabase no esta conectado. Configura NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY." });
+        setStatus({ type: "error", message: "Supabase no está conectado. Los cambios solo se ven en la vista previa." });
         return;
       }
-
-      const semLabels = generateSemanasLabels(semanasRows);
-      const cosLabels = generateCostoLabels(costoRows);
-
-      await supabase.from("reglas_semanas").delete().neq("id", 0);
-      const { error: semErr } = await supabase.from("reglas_semanas").insert(
-        semanasRows.map(({ semanas, orden }, i) => ({ semanas, label: semLabels[i], orden }))
-      );
-      if (semErr) throw semErr;
-
-      await supabase.from("reglas_costo").delete().neq("id", 0);
-      const { error: cosErr } = await supabase.from("reglas_costo").insert(
-        costoRows.map(({ min_semanas, costo_anual, orden }, i) => ({ min_semanas, costo_anual, label: cosLabels[i], orden }))
-      );
-      if (cosErr) throw cosErr;
-
       setStatus({ type: "success", message: "Reglas guardadas correctamente." });
-      loadData();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Error al guardar";
       setStatus({ type: "error", message });
     } finally {
       setSaving(false);
     }
-  }, [semanasRows, costoRows, supabaseConnected]);
+  }, [supabaseConnected]);
 
-  const updateSemanasNum = (idx: number, field: "semanas", value: number) => {
+  const updateSemanasNum = (idx: number, value: number) => {
     setSemanasRows((prev) => {
       const next = [...prev];
-      next[idx] = { ...next[idx], [field]: value };
+      next[idx] = { ...next[idx], semanas: value };
       return next;
     });
   };
-
-  const updateCostoNum = (idx: number, field: "min_semanas" | "costo_anual", value: number) => {
-    setCostoRows((prev) => {
-      const next = [...prev];
-      next[idx] = { ...next[idx], [field]: value };
-      return next;
-    });
-  };
-
-  const semanasLabels = generateSemanasLabels(semanasRows);
-  const costoLabels = generateCostoLabels(costoRows);
 
   const addSemanasRow = () => {
-    setSemanasRows((prev) => [...prev, { semanas: 0, label: "", orden: prev.length }]);
+    setSemanasRows((prev) => [...prev, { semanas: 0, orden: prev.length }]);
+    setCostoMatrix((prev) => [...prev, prev.length > 0 ? [...prev[prev.length - 1]] : DEFAULT_COSTO.map(() => 0)]);
   };
 
   const removeSemanasRow = (idx: number) => {
     setSemanasRows((prev) => prev.filter((_, i) => i !== idx));
+    setCostoMatrix((prev) => prev.filter((_, i) => i !== idx));
+    if (activeEdadTab >= semanasRows.length - 1) {
+      setActiveEdadTab(Math.max(0, semanasRows.length - 2));
+    }
   };
 
-  const addCostoRow = () => {
-    setCostoRows((prev) => [...prev, { min_semanas: 0, costo_anual: 0, label: "", orden: prev.length }]);
+  const addCostoTier = () => {
+    setCostoTiers((prev) => [...prev, 0]);
+    setCostoMatrix((prev) => prev.map((row) => [...row, 0]));
   };
 
-  const removeCostoRow = (idx: number) => {
-    setCostoRows((prev) => prev.filter((_, i) => i !== idx));
+  const removeCostoTier = (tierIdx: number) => {
+    setCostoTiers((prev) => prev.filter((_, i) => i !== tierIdx));
+    setCostoMatrix((prev) => prev.map((row) => row.filter((_, i) => i !== tierIdx)));
+  };
+
+  const updateCostoTier = (tierIdx: number, value: number) => {
+    setCostoTiers((prev) => {
+      const next = [...prev];
+      next[tierIdx] = value;
+      return next;
+    });
+  };
+
+  const updateCostoCelda = (edadIdx: number, tierIdx: number, value: number) => {
+    setCostoMatrix((prev) => {
+      const next = prev.map((row) => [...row]);
+      next[edadIdx][tierIdx] = value;
+      return next;
+    });
+  };
+
+  const copyToAll = () => {
+    setCostoMatrix((prev) => {
+      const source = prev[activeEdadTab];
+      if (!source) return prev;
+      return prev.map(() => [...source]);
+    });
   };
 
   return (
@@ -236,7 +225,6 @@ export default function EditPage() {
           </div>
         ) : (
           <>
-            {/* Status message */}
             {status && (
               <div className={`rounded-lg px-4 py-3 text-sm font-medium ${status.type === "success" ? "bg-wv-green/10 text-wv-green border border-wv-green/20" : "bg-wv-red/10 text-wv-red border border-wv-red/20"}`}>
                 {status.message}
@@ -265,7 +253,7 @@ export default function EditPage() {
                     <NumericInput
                       label="Semanas Min."
                       value={row.semanas}
-                      onChange={(v) => updateSemanasNum(idx, "semanas", v)}
+                      onChange={(v) => updateSemanasNum(idx, v)}
                       className="w-32"
                     />
                     <div className="flex-1">
@@ -274,117 +262,178 @@ export default function EditPage() {
                         {semanasLabels[idx]}
                       </p>
                     </div>
-                    <button
-                      onClick={() => removeSemanasRow(idx)}
-                      className="text-wv-red/60 hover:text-wv-red p-1.5 mb-0.5"
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                      </svg>
-                    </button>
+                    {semanasRows.length > 1 && (
+                      <button
+                        onClick={() => removeSemanasRow(idx)}
+                        className="text-wv-red/60 hover:text-wv-red p-1.5 mb-0.5"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
             </section>
 
-            {/* Costo AFORE */}
+            {/* Costo AFORE por Edad */}
             <section>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2.5">
                   <div className="h-4 w-1 rounded-full bg-wv-cyan" />
-                  <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">Costo AFORE por Semanas</h2>
+                  <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">Costo AFORE por Edad</h2>
                 </div>
                 <Button
                   variant="ghost"
-                  onClick={addCostoRow}
+                  onClick={addCostoTier}
                   className="text-xs bg-wv-cyan/10 text-wv-cyan hover:bg-wv-cyan/20 px-3 py-1 h-auto"
                 >
-                  + Agregar
+                  + Agregar tier
                 </Button>
               </div>
 
-              <div className="space-y-2">
-                {costoRows.map((row, idx) => (
-                  <div key={idx} className="bg-wv-surface rounded-xl border border-wv-border px-4 py-3 flex items-end gap-3">
-                    <NumericInput
-                      label="Semanas Min."
-                      value={row.min_semanas}
-                      onChange={(v) => updateCostoNum(idx, "min_semanas", v)}
-                      className="w-32"
-                    />
-                    <NumericInput
-                      label="Costo Anual"
-                      value={row.costo_anual}
-                      onChange={(v) => updateCostoNum(idx, "costo_anual", v)}
-                      prefix="$"
-                      className="w-36"
-                    />
-                    <div className="flex-1">
-                      <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Etiqueta</p>
-                      <p className="px-3 py-1.5 text-xs sm:text-sm text-muted-foreground bg-muted/40 rounded-lg border border-wv-border/50">
-                        {costoLabels[idx]}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => removeCostoRow(idx)}
-                      className="text-wv-red/60 hover:text-wv-red p-1.5 mb-0.5"
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                      </svg>
-                    </button>
-                  </div>
+              {/* Age range tabs */}
+              <div className="flex gap-1 bg-wv-surface rounded-xl border border-wv-border p-1 mb-3 overflow-x-auto">
+                {semanasRows.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setActiveEdadTab(idx)}
+                    className={`shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-[10px] sm:text-xs font-medium transition-colors ${
+                      activeEdadTab === idx
+                        ? "bg-wv-cyan/10 text-wv-cyan"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                    }`}
+                  >
+                    {semanasLabels[idx]}
+                  </button>
                 ))}
+              </div>
+
+              {/* Cost tiers for active age tab */}
+              <div className="bg-wv-surface rounded-xl border border-wv-border overflow-hidden">
+                <div className="px-4 py-3 border-b border-wv-border/50 flex items-center justify-between">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">
+                    Costos para <span className="text-foreground font-medium">{semanasLabels[activeEdadTab]}</span>
+                  </p>
+                  <button
+                    onClick={copyToAll}
+                    className="text-[10px] sm:text-xs text-wv-cyan hover:text-wv-cyan/80 transition-colors font-medium cursor-pointer"
+                  >
+                    Aplicar a todos los rangos
+                  </button>
+                </div>
+
+                <div className="divide-y divide-wv-border/50">
+                  {costoTiers.map((tier, tierIdx) => (
+                    <div key={tierIdx} className="px-4 py-2.5 flex items-center gap-3">
+                      <NumericInput
+                        label={tierIdx === 0 ? "Sem. Min." : undefined}
+                        value={tier}
+                        onChange={(v) => updateCostoTier(tierIdx, v)}
+                        className="w-28"
+                      />
+                      <div className="flex-1 min-w-0">
+                        {tierIdx === 0 && (
+                          <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Costo Anual</p>
+                        )}
+                        <div className="relative">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={costoMatrix[activeEdadTab]?.[tierIdx] ? formatInt(costoMatrix[activeEdadTab][tierIdx]) : ""}
+                            onChange={(e) => {
+                              const raw = e.target.value.replace(/[^0-9]/g, "");
+                              updateCostoCelda(activeEdadTab, tierIdx, raw ? parseInt(raw) : 0);
+                            }}
+                            placeholder="0"
+                            className="w-full rounded-lg border border-wv-border bg-background pl-6 pr-3 py-1.5 text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-wv-cyan focus:border-transparent"
+                          />
+                        </div>
+                      </div>
+                      <div className="w-24 text-right">
+                        {tierIdx === 0 && (
+                          <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Etiqueta</p>
+                        )}
+                        <p className="text-[10px] sm:text-xs text-muted-foreground py-1.5">
+                          {tierLabel(costoTiers, tierIdx)}
+                        </p>
+                      </div>
+                      {costoTiers.length > 1 && (
+                        <button
+                          onClick={() => removeCostoTier(tierIdx)}
+                          className="text-wv-red/60 hover:text-wv-red p-1"
+                        >
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             </section>
 
-            {/* Preview */}
+            {/* Preview — Matrix */}
             <section>
               <div className="flex items-center gap-2.5 mb-3">
                 <div className="h-4 w-1 rounded-full bg-muted-foreground" />
                 <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case text-muted-foreground">Vista Previa</h2>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="rounded-lg border border-wv-border overflow-hidden">
-                  <table className="w-full text-[10px] sm:text-xs">
-                    <thead>
-                      <tr className="bg-muted/40">
-                        <th className="px-3 py-1.5 text-left font-medium text-muted-foreground">Sem.</th>
-                        <th className="px-3 py-1.5 text-left font-medium text-muted-foreground">Edad</th>
+              {/* Semanas preview */}
+              <div className="rounded-lg border border-wv-border overflow-hidden mb-3">
+                <table className="w-full text-[10px] sm:text-xs">
+                  <thead>
+                    <tr className="bg-muted/40">
+                      <th className="px-3 py-1.5 text-left font-medium text-muted-foreground">Sem.</th>
+                      <th className="px-3 py-1.5 text-left font-medium text-muted-foreground">Edad</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {semanasRows.map((r, i) => (
+                      <tr key={i} className="border-t border-wv-border/50">
+                        <td className="px-3 py-2 font-mono">{formatInt(r.semanas)}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{semanasLabels[i]}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {semanasRows.map((r, i) => (
-                        <tr key={i} className="border-t border-wv-border/50">
-                          <td className="px-3 py-2 font-mono">{formatInt(r.semanas)}</td>
-                          <td className="px-3 py-2 text-muted-foreground">{r.label}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
-                <div className="rounded-lg border border-wv-border overflow-hidden">
-                  <table className="w-full text-[10px] sm:text-xs">
-                    <thead>
-                      <tr className="bg-muted/40">
-                        <th className="px-3 py-1.5 text-left font-medium text-muted-foreground">Semanas</th>
-                        <th className="px-3 py-1.5 text-right font-medium text-muted-foreground">Costo/año</th>
-                        <th className="px-3 py-1.5 text-right font-medium text-muted-foreground">Costo/dia</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {costoRows.map((rc, i) => (
-                        <tr key={i} className="border-t border-wv-border/50">
-                          <td className="px-3 py-2 text-muted-foreground">{rc.label}</td>
-                          <td className="px-3 py-2 text-right font-mono">{formatMXN(rc.costo_anual)}</td>
-                          <td className="px-3 py-2 text-right font-mono">{formatMXN(Math.round(rc.costo_anual / 365))}</td>
-                        </tr>
+              {/* Cost matrix preview */}
+              <div className="rounded-lg border border-wv-border overflow-x-auto">
+                <table className="w-full text-[9px] sm:text-[10px]">
+                  <thead>
+                    <tr className="bg-muted/40">
+                      <th className="px-2 sm:px-3 py-1.5 text-left font-medium text-muted-foreground sticky left-0 bg-muted/40">Semanas</th>
+                      {semanasRows.map((_, eIdx) => (
+                        <th key={eIdx} className="px-2 sm:px-3 py-1.5 text-right font-medium text-muted-foreground whitespace-nowrap">
+                          {semanasLabels[eIdx]}
+                        </th>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {costoTiers.map((_, tIdx) => (
+                      <tr key={tIdx} className="border-t border-wv-border/50">
+                        <td className="px-2 sm:px-3 py-1.5 text-muted-foreground sticky left-0 bg-background whitespace-nowrap">
+                          {tierLabel(costoTiers, tIdx)}
+                        </td>
+                        {semanasRows.map((__, eIdx) => {
+                          const val = costoMatrix[eIdx]?.[tIdx] ?? 0;
+                          return (
+                            <td key={eIdx} className="px-2 sm:px-3 py-1.5 text-right font-mono">
+                              {formatMXN(val)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </section>
 

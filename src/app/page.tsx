@@ -43,21 +43,34 @@ function formatDiasCompleto(totalDias: number): string {
   return parts.join(" ");
 }
 
-const RANGOS_COSTO = [
-  { minSemanas: 1700, costoAnual: 60000, label: "1,700+" },
-  { minSemanas: 1450, costoAnual: 70000, label: "1,450 — 1,699" },
-  { minSemanas: 1200, costoAnual: 80000, label: "1,200 — 1,449" },
-  { minSemanas: 1000, costoAnual: 90000, label: "1,000 — 1,199" },
-  { minSemanas: 0,    costoAnual: 100000, label: "< 1,000" },
+const COSTO_TIERS = [1700, 1450, 1200, 1000, 0];
+
+function costoTierLabel(tierIdx: number): string {
+  const min = COSTO_TIERS[tierIdx];
+  if (tierIdx === 0) return `${formatInt(min)}+`;
+  const prevMin = COSTO_TIERS[tierIdx - 1];
+  if (min === 0) return `< ${formatInt(prevMin)}`;
+  return `${formatInt(min)} — ${formatInt(prevMin - 1)}`;
+}
+
+// [edadIdx][tierIdx] = costo_anual — each age range can have different costs
+const COSTO_POR_EDAD: number[][] = [
+  [60000, 70000, 80000, 90000, 100000], // Hasta 60.5
+  [60000, 70000, 80000, 90000, 100000], // 60.5 — 61.5
+  [60000, 70000, 80000, 90000, 100000], // 61.5 — 62.5
+  [60000, 70000, 80000, 90000, 100000], // 62.5 — 63.5
+  [60000, 70000, 80000, 90000, 100000], // 63.5 — 64.5
+  [60000, 70000, 80000, 90000, 100000], // Más de 64.5
 ];
 
-function getCostoRango(semanas: number): { costoAnual: number; rangoIndex: number } {
-  for (let i = 0; i < RANGOS_COSTO.length; i++) {
-    if (semanas >= RANGOS_COSTO[i].minSemanas) {
-      return { costoAnual: RANGOS_COSTO[i].costoAnual, rangoIndex: i };
+function getCostoRango(semanas: number, edadRangoIdx: number): { costoAnual: number; rangoIndex: number } {
+  const costos = COSTO_POR_EDAD[edadRangoIdx] ?? COSTO_POR_EDAD[0];
+  for (let i = 0; i < COSTO_TIERS.length; i++) {
+    if (semanas >= COSTO_TIERS[i]) {
+      return { costoAnual: costos[i], rangoIndex: i };
     }
   }
-  return { costoAnual: 100000, rangoIndex: RANGOS_COSTO.length - 1 };
+  return { costoAnual: costos[costos.length - 1], rangoIndex: COSTO_TIERS.length - 1 };
 }
 
 const LIMITE_MOD10_DIAS = 4 * 365 + 11 * 30 + 22;
@@ -575,7 +588,7 @@ export default function Home() {
       viviendaAjustada
     : 0;
   const sinTrabajar = result ? calcSinTrabajar(result.records) : null;
-  const { costoAnual, rangoIndex: costoRangoIndex } = getCostoRango(semanasTotales);
+  const { costoAnual, rangoIndex: costoRangoIndex } = getCostoRango(semanasTotales, semanasRangoIndex);
   const costoDiario = costoAnual / 365;
   const montoRequerido = sinTrabajar
     ? Math.round(sinTrabajar.dias * costoDiario)
@@ -1041,6 +1054,7 @@ export default function Home() {
                     </div>
 
                     <DetailToggle label="Ver tabla de costos y cálculo del monto requerido">
+                      <p className="text-muted-foreground/70 mb-1 font-sans">Rango de edad: {RANGOS_SEMANAS[semanasRangoIndex].label}</p>
                       <div className="rounded-lg border border-wv-border overflow-hidden font-sans">
                         <table className="w-full text-[10px] sm:text-xs">
                           <thead>
@@ -1051,7 +1065,8 @@ export default function Home() {
                             </tr>
                           </thead>
                           <tbody>
-                            {RANGOS_COSTO.map((rc, i) => {
+                            {COSTO_TIERS.map((tier, i) => {
+                              const costoVal = (COSTO_POR_EDAD[semanasRangoIndex] ?? COSTO_POR_EDAD[0])[i];
                               const isActive = i === costoRangoIndex;
                               return (
                                 <tr
@@ -1060,9 +1075,9 @@ export default function Home() {
                                     ? "bg-wv-cyan/10 font-semibold"
                                     : "border-t border-wv-border/50"}
                                 >
-                                  <td className={`px-2.5 sm:px-3 py-1 ${isActive ? "text-wv-cyan" : "text-muted-foreground"}`}>{rc.label}</td>
-                                  <td className={`px-2.5 sm:px-3 py-1 text-right font-mono ${isActive ? "text-wv-cyan" : ""}`}>{formatMXN(rc.costoAnual)}</td>
-                                  <td className={`px-2.5 sm:px-3 py-1 text-right font-mono ${isActive ? "text-wv-cyan" : ""}`}>{formatMXN(Math.round(rc.costoAnual / 365))}</td>
+                                  <td className={`px-2.5 sm:px-3 py-1 ${isActive ? "text-wv-cyan" : "text-muted-foreground"}`}>{costoTierLabel(i)}</td>
+                                  <td className={`px-2.5 sm:px-3 py-1 text-right font-mono ${isActive ? "text-wv-cyan" : ""}`}>{formatMXN(costoVal)}</td>
+                                  <td className={`px-2.5 sm:px-3 py-1 text-right font-mono ${isActive ? "text-wv-cyan" : ""}`}>{formatMXN(Math.round(costoVal / 365))}</td>
                                 </tr>
                               );
                             })}
@@ -1071,7 +1086,8 @@ export default function Home() {
                       </div>
                       <div className="mt-2 space-y-0.5">
                         <StepRow label="Semanas cotizadas" value={formatInt(semanasTotales)} />
-                        <StepRow label="Costo anual (según rango)" value={formatMXN(costoAnual)} />
+                        <StepRow label={`Rango edad: ${RANGOS_SEMANAS[semanasRangoIndex].label}`} value={`Tier: ${costoTierLabel(costoRangoIndex)}`} />
+                        <StepRow label="Costo anual (según rango × edad)" value={formatMXN(costoAnual)} />
                         <StepRow label="Costo diario (anual ÷ 365)" value={formatMXN(Math.round(costoDiario))} />
                         <StepRow label="Días sin trabajar" value={formatInt(sinTrabajar?.dias ?? 0)} />
                         <StepRow label={`Monto requerido (${formatInt(sinTrabajar?.dias ?? 0)}d × ${formatMXN(Math.round(costoDiario))}/d)`} value={formatMXN(montoRequerido)} highlight />
