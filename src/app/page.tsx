@@ -43,69 +43,121 @@ function formatDiasCompleto(totalDias: number): string {
   return parts.join(" ");
 }
 
-const COSTO_TIERS = [1700, 1450, 1200, 1000, 0];
+interface RangoEdad {
+  semanas: number;
+  edadMinima: number;
+}
 
-function costoTierLabel(tierIdx: number): string {
-  const min = COSTO_TIERS[tierIdx];
+const DEFAULT_RANGOS: RangoEdad[] = [
+  { semanas: 900, edadMinima: 0 },
+  { semanas: 870, edadMinima: 60.5 },
+  { semanas: 840, edadMinima: 61.5 },
+  { semanas: 810, edadMinima: 62.5 },
+  { semanas: 780, edadMinima: 63.5 },
+  { semanas: 750, edadMinima: 64.5 },
+];
+
+const DEFAULT_COSTO_TIERS = [1700, 1450, 1200, 1000, 0];
+const DEFAULT_COSTO_MATRIX: number[][] = DEFAULT_RANGOS.map(() => [60000, 70000, 80000, 90000, 100000]);
+
+function makeTierLabel(tiers: number[], tierIdx: number): string {
+  const min = tiers[tierIdx];
   if (tierIdx === 0) return `${formatInt(min)}+`;
-  const prevMin = COSTO_TIERS[tierIdx - 1];
+  const prevMin = tiers[tierIdx - 1];
   if (min === 0) return `< ${formatInt(prevMin)}`;
   return `${formatInt(min)} — ${formatInt(prevMin - 1)}`;
 }
 
-// [edadIdx][tierIdx] = costo_anual — each age range can have different costs
-const COSTO_POR_EDAD: number[][] = [
-  [60000, 70000, 80000, 90000, 100000], // Hasta 60.5
-  [60000, 70000, 80000, 90000, 100000], // 60.5 — 61.5
-  [60000, 70000, 80000, 90000, 100000], // 61.5 — 62.5
-  [60000, 70000, 80000, 90000, 100000], // 62.5 — 63.5
-  [60000, 70000, 80000, 90000, 100000], // 63.5 — 64.5
-  [60000, 70000, 80000, 90000, 100000], // Más de 64.5
-];
-
-function getCostoRango(semanas: number, edadRangoIdx: number): { costoAnual: number; rangoIndex: number } {
-  const costos = COSTO_POR_EDAD[edadRangoIdx] ?? COSTO_POR_EDAD[0];
-  for (let i = 0; i < COSTO_TIERS.length; i++) {
-    if (semanas >= COSTO_TIERS[i]) {
+function findCostoRango(semanas: number, edadRangoIdx: number, tiers: number[], matrix: number[][]): { costoAnual: number; rangoIndex: number } {
+  const costos = matrix[edadRangoIdx] ?? matrix[0];
+  for (let i = 0; i < tiers.length; i++) {
+    if (semanas >= tiers[i]) {
       return { costoAnual: costos[i], rangoIndex: i };
     }
   }
-  return { costoAnual: costos[costos.length - 1], rangoIndex: COSTO_TIERS.length - 1 };
+  return { costoAnual: costos[costos.length - 1], rangoIndex: tiers.length - 1 };
 }
 
 const LIMITE_MOD10_DIAS = 4 * 365 + 11 * 30 + 22;
 const LIMITE_MOD40_DIAS = 11 * 30 + 12;
 
-const RANGOS_SEMANAS = [
-  { semanas: 900, label: "Hasta 60.5 años" },
-  { semanas: 870, label: "60.5 — 61.5 años" },
-  { semanas: 840, label: "61.5 — 62.5 años" },
-  { semanas: 810, label: "62.5 — 63.5 años" },
-  { semanas: 780, label: "63.5 — 64.5 años" },
-  { semanas: 750, label: "Más de 64.5 años" },
-];
+function rangoEdadLabel(rangos: RangoEdad[], idx: number): string {
+  if (rangos.length <= 1) return "Todas las edades";
+  if (idx === 0) return `Hasta ${rangos[1].edadMinima} años`;
+  if (idx === rangos.length - 1) return `Más de ${rangos[idx].edadMinima} años`;
+  return `${rangos[idx].edadMinima} — ${rangos[idx + 1].edadMinima} años`;
+}
 
-function getSemanasMinByEdad(fechaNac: Date | null): { minSemanas: number; rangoIndex: number } {
-  if (!fechaNac) return { minSemanas: 900, rangoIndex: 0 };
+function findSemanasMinByEdad(fechaNac: Date | null, rangos: RangoEdad[]): { minSemanas: number; rangoIndex: number } {
+  if (!fechaNac || rangos.length === 0) return { minSemanas: rangos[0]?.semanas ?? 900, rangoIndex: 0 };
   const hoy = new Date();
-  const thresholds = [
-    { anos: 64, meses: 6, idx: 5 },
-    { anos: 63, meses: 6, idx: 4 },
-    { anos: 62, meses: 6, idx: 3 },
-    { anos: 61, meses: 6, idx: 2 },
-    { anos: 60, meses: 6, idx: 1 },
-  ];
-  for (const t of thresholds) {
+  for (let i = rangos.length - 1; i > 0; i--) {
+    const edadMin = rangos[i].edadMinima;
+    const years = Math.floor(edadMin);
+    const months = Math.round((edadMin - years) * 12);
     const threshold = new Date(Date.UTC(
-      fechaNac.getUTCFullYear() + t.anos,
-      fechaNac.getUTCMonth() + t.meses,
+      fechaNac.getUTCFullYear() + years,
+      fechaNac.getUTCMonth() + months,
       fechaNac.getUTCDate() + 1,
     ));
     if (hoy.getTime() >= threshold.getTime()) {
-      return { minSemanas: RANGOS_SEMANAS[t.idx].semanas, rangoIndex: t.idx };
+      return { minSemanas: rangos[i].semanas, rangoIndex: i };
     }
   }
-  return { minSemanas: 900, rangoIndex: 0 };
+  return { minSemanas: rangos[0].semanas, rangoIndex: 0 };
+}
+
+function NumericInput({
+  value,
+  onChange,
+  prefix,
+  className = "",
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  prefix?: string;
+  className?: string;
+}) {
+  return (
+    <div className={`relative ${className}`}>
+      {prefix && <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{prefix}</span>}
+      <input
+        type="text"
+        inputMode="numeric"
+        value={value ? formatInt(value) : ""}
+        onChange={(e) => {
+          const raw = e.target.value.replace(/[^0-9]/g, "");
+          onChange(raw ? parseInt(raw) : 0);
+        }}
+        placeholder="0"
+        className={`w-full rounded-lg border border-wv-border bg-background ${prefix ? "pl-6" : "px-3"} pr-3 py-1.5 text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-wv-cyan focus:border-transparent`}
+      />
+    </div>
+  );
+}
+
+function DecimalInput({
+  value,
+  onChange,
+  className = "",
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  className?: string;
+}) {
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={value || ""}
+      onChange={(e) => {
+        const raw = e.target.value.replace(/[^0-9.]/g, "");
+        onChange(raw ? parseFloat(raw) || 0 : 0);
+      }}
+      placeholder="0"
+      className={`w-full rounded-lg border border-wv-border bg-background px-3 py-1.5 text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-wv-cyan focus:border-transparent ${className}`}
+    />
+  );
 }
 
 function calcEdadExacta(fechaNac: Date): { anos: number; meses: number; dias: number } {
@@ -537,6 +589,11 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>("calculadora");
   const [esposa, setEsposa] = useState(true);
   const [hijos, setHijos] = useState(0);
+  const [rangosEdad, setRangosEdad] = useState<RangoEdad[]>(DEFAULT_RANGOS.map(r => ({ ...r })));
+  const [costoTiers, setCostoTiers] = useState<number[]>([...DEFAULT_COSTO_TIERS]);
+  const [costoMatrix, setCostoMatrix] = useState<number[][]>(DEFAULT_COSTO_MATRIX.map(r => [...r]));
+  const [showConfig, setShowConfig] = useState(false);
+  const [activeEdadTab, setActiveEdadTab] = useState(0);
 
   const handleTextExtracted = useCallback(async (text: string) => {
     setIsProcessing(true);
@@ -577,7 +634,7 @@ export default function Home() {
   const semanasTotales = result
     ? result.header.totalSemanasCotizadas + result.header.semanasReintegradas
     : 0;
-  const { minSemanas: semanasMinimas, rangoIndex: semanasRangoIndex } = getSemanasMinByEdad(edadInfo?.fechaNacimiento ?? null);
+  const { minSemanas: semanasMinimas, rangoIndex: semanasRangoIndex } = findSemanasMinByEdad(edadInfo?.fechaNacimiento ?? null, rangosEdad);
   const cumpleSemanas = semanasTotales >= semanasMinimas;
   const viviendaBruta = result ? result.afore.totalVivienda : 0;
   const descuentoCredito = tieneCredito ? Math.min(montoCredito, viviendaBruta) : 0;
@@ -588,7 +645,7 @@ export default function Home() {
       viviendaAjustada
     : 0;
   const sinTrabajar = result ? calcSinTrabajar(result.records) : null;
-  const { costoAnual, rangoIndex: costoRangoIndex } = getCostoRango(semanasTotales, semanasRangoIndex);
+  const { costoAnual, rangoIndex: costoRangoIndex } = findCostoRango(semanasTotales, semanasRangoIndex, costoTiers, costoMatrix);
   const costoDiario = costoAnual / 365;
   const montoRequerido = sinTrabajar
     ? Math.round(sinTrabajar.dias * costoDiario)
@@ -700,6 +757,16 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2 no-print">
             <ThemeToggle />
+            <button
+              type="button"
+              onClick={() => setShowConfig(!showConfig)}
+              className={`h-8 w-8 rounded-lg flex items-center justify-center transition-colors ${showConfig ? "bg-wv-cyan/20 text-wv-cyan" : "bg-foreground/5 text-muted-foreground hover:text-foreground hover:bg-foreground/10"}`}
+              title="Configuración"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </button>
             {result && (
               <>
                 <span className="hidden sm:inline-flex">
@@ -718,6 +785,175 @@ export default function Home() {
           </div>
         </div>
       </header>
+
+      {showConfig && (
+        <div className="border-b border-wv-border bg-wv-surface/50 no-print">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="h-4 w-1 rounded-full bg-wv-cyan" />
+                <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">Configuración de Reglas</h2>
+              </div>
+              <button onClick={() => setShowConfig(false)} className="text-muted-foreground hover:text-foreground p-1">
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+            </div>
+
+            {/* Rangos de Edad */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Rangos de Edad</p>
+                <button
+                  onClick={() => {
+                    const lastEdad = rangosEdad.length > 0 ? rangosEdad[rangosEdad.length - 1].edadMinima + 1 : 60.5;
+                    setRangosEdad(prev => [...prev, { semanas: Math.max(0, (prev[prev.length - 1]?.semanas ?? 750) - 30), edadMinima: lastEdad }]);
+                    setCostoMatrix(prev => [...prev, prev.length > 0 ? [...prev[prev.length - 1]] : [0]]);
+                  }}
+                  className="text-[10px] sm:text-xs text-wv-cyan hover:text-wv-cyan/80 font-medium"
+                >
+                  + Agregar rango
+                </button>
+              </div>
+              <div className="space-y-1.5">
+                {rangosEdad.map((rango, idx) => (
+                  <div key={idx} className="bg-background rounded-lg border border-wv-border/50 px-3 py-2 flex items-center gap-2 sm:gap-3">
+                    <div className="w-16 sm:w-20 shrink-0">
+                      {idx === 0 ? (
+                        <p className="text-[10px] sm:text-xs text-muted-foreground py-1.5">Base</p>
+                      ) : (
+                        <DecimalInput value={rango.edadMinima} onChange={(v) => setRangosEdad(prev => { const n = [...prev]; n[idx] = { ...n[idx], edadMinima: v }; return n; })} />
+                      )}
+                    </div>
+                    <p className="text-[9px] sm:text-[10px] text-muted-foreground shrink-0">años →</p>
+                    <div className="w-20 sm:w-24 shrink-0">
+                      <NumericInput value={rango.semanas} onChange={(v) => setRangosEdad(prev => { const n = [...prev]; n[idx] = { ...n[idx], semanas: v }; return n; })} />
+                    </div>
+                    <p className="text-[9px] sm:text-[10px] text-muted-foreground shrink-0">sem.</p>
+                    <p className="flex-1 text-[10px] sm:text-xs text-muted-foreground truncate">{rangoEdadLabel(rangosEdad, idx)}</p>
+                    {rangosEdad.length > 1 && (
+                      <button
+                        onClick={() => {
+                          setRangosEdad(prev => prev.filter((_, i) => i !== idx));
+                          setCostoMatrix(prev => prev.filter((_, i) => i !== idx));
+                          if (activeEdadTab >= rangosEdad.length - 1) setActiveEdadTab(Math.max(0, rangosEdad.length - 2));
+                        }}
+                        className="text-wv-red/50 hover:text-wv-red p-0.5 shrink-0"
+                      >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Costos AFORE por Edad */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Costos AFORE por Edad</p>
+                <button
+                  onClick={() => {
+                    setCostoTiers(prev => [...prev, 0]);
+                    setCostoMatrix(prev => prev.map(row => [...row, 0]));
+                  }}
+                  className="text-[10px] sm:text-xs text-wv-cyan hover:text-wv-cyan/80 font-medium"
+                >
+                  + Agregar tier
+                </button>
+              </div>
+
+              {/* Age range tabs */}
+              <div className="flex gap-1 bg-background rounded-lg border border-wv-border/50 p-0.5 mb-2 overflow-x-auto">
+                {rangosEdad.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setActiveEdadTab(idx)}
+                    className={`shrink-0 px-2 sm:px-2.5 py-1 rounded-md text-[9px] sm:text-[10px] font-medium transition-colors ${
+                      activeEdadTab === idx
+                        ? "bg-wv-cyan/10 text-wv-cyan"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                    }`}
+                  >
+                    {rangoEdadLabel(rangosEdad, idx)}
+                  </button>
+                ))}
+              </div>
+
+              <div className="bg-background rounded-lg border border-wv-border/50 overflow-hidden">
+                <div className="px-3 py-2 border-b border-wv-border/30 flex items-center justify-between">
+                  <p className="text-[9px] sm:text-[10px] text-muted-foreground">
+                    <span className="text-foreground font-medium">{rangoEdadLabel(rangosEdad, activeEdadTab)}</span>
+                  </p>
+                  <button
+                    onClick={() => setCostoMatrix(prev => { const src = prev[activeEdadTab]; if (!src) return prev; return prev.map(() => [...src]); })}
+                    className="text-[9px] sm:text-[10px] text-wv-cyan hover:text-wv-cyan/80 font-medium"
+                  >
+                    Aplicar a todos
+                  </button>
+                </div>
+                <div className="divide-y divide-wv-border/30">
+                  {costoTiers.map((tier, tIdx) => (
+                    <div key={tIdx} className="px-3 py-1.5 flex items-center gap-2">
+                      <div className="w-20 shrink-0">
+                        <NumericInput value={tier} onChange={(v) => setCostoTiers(prev => { const n = [...prev]; n[tIdx] = v; return n; })} />
+                      </div>
+                      <p className="text-[9px] text-muted-foreground shrink-0">sem →</p>
+                      <div className="w-24 shrink-0">
+                        <NumericInput
+                          value={costoMatrix[activeEdadTab]?.[tIdx] ?? 0}
+                          onChange={(v) => setCostoMatrix(prev => { const n = prev.map(r => [...r]); n[activeEdadTab][tIdx] = v; return n; })}
+                          prefix="$"
+                        />
+                      </div>
+                      <p className="flex-1 text-[9px] sm:text-[10px] text-muted-foreground truncate">{makeTierLabel(costoTiers, tIdx)}</p>
+                      {costoTiers.length > 1 && (
+                        <button
+                          onClick={() => {
+                            setCostoTiers(prev => prev.filter((_, i) => i !== tIdx));
+                            setCostoMatrix(prev => prev.map(row => row.filter((_, i) => i !== tIdx)));
+                          }}
+                          className="text-wv-red/50 hover:text-wv-red p-0.5 shrink-0"
+                        >
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Matrix preview */}
+            <div>
+              <p className="text-[9px] sm:text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Vista Previa</p>
+              <div className="rounded-lg border border-wv-border/50 overflow-x-auto">
+                <table className="w-full text-[8px] sm:text-[9px]">
+                  <thead>
+                    <tr className="bg-muted/40">
+                      <th className="px-2 py-1 text-left font-medium text-muted-foreground sticky left-0 bg-muted/40">Semanas</th>
+                      {rangosEdad.map((_, eIdx) => (
+                        <th key={eIdx} className="px-2 py-1 text-right font-medium text-muted-foreground whitespace-nowrap">
+                          {rangoEdadLabel(rangosEdad, eIdx)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {costoTiers.map((_, tIdx) => (
+                      <tr key={tIdx} className="border-t border-wv-border/30">
+                        <td className="px-2 py-1 text-muted-foreground sticky left-0 bg-background whitespace-nowrap">{makeTierLabel(costoTiers, tIdx)}</td>
+                        {rangosEdad.map((__, eIdx) => (
+                          <td key={eIdx} className="px-2 py-1 text-right font-mono">{formatMXN(costoMatrix[eIdx]?.[tIdx] ?? 0)}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
         {!result && (
@@ -1000,7 +1236,7 @@ export default function Home() {
                             </tr>
                           </thead>
                           <tbody>
-                            {RANGOS_SEMANAS.map((r, i) => {
+                            {rangosEdad.map((r, i) => {
                               const isActive = i === semanasRangoIndex;
                               return (
                                 <tr
@@ -1010,7 +1246,7 @@ export default function Home() {
                                     : "border-t border-wv-border/50"}
                                 >
                                   <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 font-mono ${isActive ? "text-wv-cyan" : ""}`}>{formatInt(r.semanas)}</td>
-                                  <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 ${isActive ? "text-wv-cyan" : "text-muted-foreground"}`}>{r.label}</td>
+                                  <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 ${isActive ? "text-wv-cyan" : "text-muted-foreground"}`}>{rangoEdadLabel(rangosEdad, i)}</td>
                                 </tr>
                               );
                             })}
@@ -1054,7 +1290,7 @@ export default function Home() {
                     </div>
 
                     <DetailToggle label="Ver tabla de costos y cálculo del monto requerido">
-                      <p className="text-muted-foreground/70 mb-1 font-sans">Rango de edad: {RANGOS_SEMANAS[semanasRangoIndex].label}</p>
+                      <p className="text-muted-foreground/70 mb-1 font-sans">Rango de edad: {rangoEdadLabel(rangosEdad, semanasRangoIndex)}</p>
                       <div className="rounded-lg border border-wv-border overflow-hidden font-sans">
                         <table className="w-full text-[10px] sm:text-xs">
                           <thead>
@@ -1065,8 +1301,8 @@ export default function Home() {
                             </tr>
                           </thead>
                           <tbody>
-                            {COSTO_TIERS.map((tier, i) => {
-                              const costoVal = (COSTO_POR_EDAD[semanasRangoIndex] ?? COSTO_POR_EDAD[0])[i];
+                            {costoTiers.map((_, i) => {
+                              const costoVal = (costoMatrix[semanasRangoIndex] ?? costoMatrix[0])[i];
                               const isActive = i === costoRangoIndex;
                               return (
                                 <tr
@@ -1075,7 +1311,7 @@ export default function Home() {
                                     ? "bg-wv-cyan/10 font-semibold"
                                     : "border-t border-wv-border/50"}
                                 >
-                                  <td className={`px-2.5 sm:px-3 py-1 ${isActive ? "text-wv-cyan" : "text-muted-foreground"}`}>{costoTierLabel(i)}</td>
+                                  <td className={`px-2.5 sm:px-3 py-1 ${isActive ? "text-wv-cyan" : "text-muted-foreground"}`}>{makeTierLabel(costoTiers, i)}</td>
                                   <td className={`px-2.5 sm:px-3 py-1 text-right font-mono ${isActive ? "text-wv-cyan" : ""}`}>{formatMXN(costoVal)}</td>
                                   <td className={`px-2.5 sm:px-3 py-1 text-right font-mono ${isActive ? "text-wv-cyan" : ""}`}>{formatMXN(Math.round(costoVal / 365))}</td>
                                 </tr>
@@ -1086,7 +1322,7 @@ export default function Home() {
                       </div>
                       <div className="mt-2 space-y-0.5">
                         <StepRow label="Semanas cotizadas" value={formatInt(semanasTotales)} />
-                        <StepRow label={`Rango edad: ${RANGOS_SEMANAS[semanasRangoIndex].label}`} value={`Tier: ${costoTierLabel(costoRangoIndex)}`} />
+                        <StepRow label={`Rango edad: ${rangoEdadLabel(rangosEdad, semanasRangoIndex)}`} value={`Tier: ${makeTierLabel(costoTiers, costoRangoIndex)}`} />
                         <StepRow label="Costo anual (según rango × edad)" value={formatMXN(costoAnual)} />
                         <StepRow label="Costo diario (anual ÷ 365)" value={formatMXN(Math.round(costoDiario))} />
                         <StepRow label="Días sin trabajar" value={formatInt(sinTrabajar?.dias ?? 0)} />
