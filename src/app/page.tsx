@@ -1544,7 +1544,7 @@ export default function Home() {
 
                 {/* Financiamiento — decisión clave para el asesor */}
                 {edadInfo && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5">
+                  <div className={`grid grid-cols-1 ${perdioDerechos ? "sm:grid-cols-3" : "sm:grid-cols-2"} gap-2 sm:gap-2.5`}>
                     <div
                       className={`rounded-xl sm:rounded-[16px] overflow-hidden border-2 ${asesoriaAhoraCumple ? "border-wv-green/40 bg-gradient-to-br from-wv-surface to-wv-green/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
                     >
@@ -1612,10 +1612,51 @@ export default function Home() {
                         </div>
                       </div>
                     </div>
+
+                    {perdioDerechos && (
+                      <div
+                        className={`rounded-xl sm:rounded-[16px] overflow-hidden border-2 ${recupAcredita ? "border-amber-500/40 bg-gradient-to-br from-wv-surface to-amber-500/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
+                      >
+                        <div className="px-4 sm:px-5 py-3 sm:py-4 space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="font-semibold text-sm sm:text-base">
+                                Recuperación de Derechos
+                              </p>
+                              <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
+                                Reingreso vía Mod 10
+                              </p>
+                            </div>
+                            <StatusBadge
+                              pass={recupAcredita}
+                              labelPass="Acredita"
+                              labelFail="No acredita"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <SubCheck
+                              pass={recupCumpleEdad}
+                              label="Edad min. 59"
+                              value={`${edad} años`}
+                            />
+                            <SubCheck
+                              pass={recupCumpleSemanas}
+                              label="Min. 450 semanas"
+                              value={`${formatInt(semanasTotales)} semanas`}
+                            />
+                            <SubCheck
+                              pass={recupCumpleAfore}
+                              label="AFORE min. $80,000"
+                              value={formatMXN(saldoAfore)}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Conservación y Recuperación de Derechos — Art. 150/151 */}
+                {/* Conservación de Derechos — Art. 150/151 */}
                 {edadInfo && isLey73 && (
                   <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
                     <div className={`border-l-4 ${perdioDerechos ? "border-l-amber-500" : "border-l-wv-green"} px-3.5 sm:px-4 py-2.5 sm:py-3 space-y-2 sm:space-y-2.5`}>
@@ -1623,7 +1664,7 @@ export default function Home() {
                         <div className="min-w-0">
                           <p className="font-medium text-xs sm:text-sm">Conservación de Derechos</p>
                           <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 leading-tight">
-                            Art. 150 — 25% de semanas cotizadas = {formatInt(semanasConservacion)} sem ({formatDiasCompleto(diasConservacion)})
+                            Art. 150 — 25% de {formatInt(semanasTotales)} sem = {formatInt(semanasConservacion)} sem ({formatDiasCompleto(diasConservacion)})
                           </p>
                         </div>
                         <StatusBadge
@@ -1649,56 +1690,21 @@ export default function Home() {
                       </div>
 
                       {perdioDerechos && (
-                        <>
-                          <div className="rounded-lg p-2.5 border border-amber-500/20 bg-amber-500/5">
-                            <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Art. 151 — Recuperación</p>
-                            <p className="text-xs sm:text-sm font-semibold mt-0.5 text-amber-500">
-                              {semanasNuevasRequeridas === 0
-                                ? "Reingreso inmediato — se reconocen todas las semanas"
-                                : `${semanasNuevasRequeridas} semanas nuevas requeridas`}
-                            </p>
-                            <p className="text-[9px] text-muted-foreground mt-0.5">
-                              {anosDesdePerdida <= 3
-                                ? "Menos de 3 años desde pérdida — reconocimiento inmediato al reingresar"
-                                : anosDesdePerdida <= 6
-                                  ? "Entre 3 y 6 años — reconocimiento tras 26 semanas nuevas (≈6 meses)"
-                                  : "Más de 6 años — reconocimiento tras 52 semanas nuevas (≈1 año)"}
-                            </p>
-                          </div>
-
-                          <div className={`rounded-xl overflow-hidden border-2 ${recupAcredita ? "border-amber-500/40 bg-gradient-to-br from-wv-surface to-amber-500/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}>
-                            <div className="px-3 sm:px-4 py-2.5 sm:py-3 space-y-2">
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="min-w-0">
-                                  <p className="font-semibold text-xs sm:text-sm">Financiamiento Recuperación</p>
-                                  <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">Reingreso vía Mod 10</p>
-                                </div>
-                                <StatusBadge
-                                  pass={recupAcredita}
-                                  labelPass="Acredita"
-                                  labelFail="No acredita"
-                                />
-                              </div>
-                              <div className="space-y-1.5">
-                                <SubCheck
-                                  pass={recupCumpleEdad}
-                                  label="Edad min. 59"
-                                  value={`${edad} años`}
-                                />
-                                <SubCheck
-                                  pass={recupCumpleSemanas}
-                                  label="Min. 450 semanas"
-                                  value={`${formatInt(semanasTotales)} semanas`}
-                                />
-                                <SubCheck
-                                  pass={recupCumpleAfore}
-                                  label="AFORE min. $80,000"
-                                  value={formatMXN(saldoAfore)}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        </>
+                        <div className="rounded-lg p-2.5 border border-amber-500/20 bg-amber-500/5">
+                          <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Art. 151 — Semanas nuevas para recuperar</p>
+                          <p className="text-xs sm:text-sm font-semibold mt-0.5 text-amber-500">
+                            {semanasNuevasRequeridas === 0
+                              ? "Reingreso inmediato — se reconocen todas las semanas"
+                              : `${semanasNuevasRequeridas} semanas nuevas requeridas`}
+                          </p>
+                          <p className="text-[9px] text-muted-foreground mt-0.5">
+                            {anosDesdePerdida <= 3
+                              ? "Menos de 3 años desde pérdida — reconocimiento inmediato al reingresar"
+                              : anosDesdePerdida <= 6
+                                ? "Entre 3 y 6 años — reconocimiento tras 26 semanas nuevas (≈6 meses)"
+                                : "Más de 6 años — reconocimiento tras 52 semanas nuevas (≈1 año)"}
+                          </p>
+                        </div>
                       )}
 
                       <DetailToggle label="Ver cálculo de conservación">
