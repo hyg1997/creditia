@@ -69,6 +69,12 @@ function getSMG(year: number): number {
   return SMG_BY_YEAR[year] ?? SMG_BY_YEAR[2026];
 }
 
+export function getPensionMinima(year?: number): number {
+  const y = year ?? new Date().getUTCFullYear();
+  const smg = getSMG(y);
+  return smg * 365 / 12 * 1.11;
+}
+
 function lookupCuantia(salarioEnUMAs: number): { basica: number; incremento: number } {
   for (const row of CUANTIA_TABLE) {
     if (salarioEnUMAs <= row.to) return { basica: row.basica, incremento: row.incremento };
@@ -179,6 +185,18 @@ function calcPension(input: PensionCalcInput): PensionCalcResult {
   };
 
   if (totalSemanas < 500 || salarioPromedio <= 0) {
+    if (salarioPromedio > 0 && totalSemanas > 0) {
+      const year = retirementDate.getUTCFullYear();
+      const month = retirementDate.getUTCMonth() + 1;
+      const smg = getSMG(year);
+      const uma = getUMA(year, month);
+      const pensionMinima = smg * 365 / 12 * 1.11;
+      const isr = calcISR(pensionMinima, uma);
+      return {
+        pensionBruta: pensionMinima, isr, pensionNeta: pensionMinima - isr,
+        steps: { ...emptySteps, salarioPromedio, totalSemanas, edadRetiro, uma, smg, pensionMinima, usaPensionMinima: true },
+      };
+    }
     return { pensionBruta: 0, isr: 0, pensionNeta: 0, steps: emptySteps };
   }
 

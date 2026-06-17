@@ -12,7 +12,7 @@ import { PrintButton } from "@/components/print-button";
 import { RetirosDesempleo } from "@/components/retiros-desempleo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { formatMXN, formatInt } from "@/lib/formatters";
-import { calcEscenarios, type ScenarioOutput } from "@/lib/calculations/pension-scenarios";
+import { calcEscenarios, getPensionMinima, type ScenarioOutput } from "@/lib/calculations/pension-scenarios";
 
 function parseDDMMYYYY(s: string): Date {
   const [d, m, y] = s.split("/").map(Number);
@@ -702,13 +702,20 @@ export default function Home() {
   // Art. 151: Recuperación — semanas nuevas requeridas según tiempo desde pérdida
   const diasDesdePerdida = Math.max(0, diasSinCotizar - diasConservacion);
   const anosDesdePerdida = diasDesdePerdida / 365;
-  const semanasNuevasRequeridas = anosDesdePerdida <= 3 ? 0 : anosDesdePerdida <= 6 ? 26 : 52;
+  const semanasNuevasRequeridas = anosDesdePerdida <= 3 ? 0 : anosDesdePerdida <= 5 ? 26 : 52;
 
   // Filtros de negocio para financiamiento de recuperación
   const recupCumpleEdad = edad >= 59;
-  const recupCumpleSemanas = semanasTotales >= 450;
-  const recupCumpleAfore = saldoAfore >= 80000;
+  const recupCumpleSemanas = semanasTotales >= 430;
+  const recupCumpleAfore = saldoAfore >= 40000;
   const recupAcredita = perdioDerechos && recupCumpleEdad && recupCumpleSemanas && recupCumpleAfore;
+
+  // Actualización de Pensión Mínima — 4ta opción de financiamiento
+  const edadEnMeses = edadExacta ? edadExacta.anos * 12 + edadExacta.meses : 0;
+  const actMinCumpleEdad = edadEnMeses >= 59 * 12 + 8; // 59 años 8 meses
+  const actMinCumpleSemanas = semanasTotales >= 470;
+  const actMinCumpleSinCotizar = diasSinCotizar >= 730; // 2 años
+  const pensionMinimaVigente = getPensionMinima();
 
   const initials = result?.header.nombre
     ? result.header.nombre
@@ -742,6 +749,10 @@ export default function Home() {
       hijos,
     });
   }, [result, edadInfo?.fechaNacimiento, ultimaCotizacion, pensionResult, esposa, hijos]);
+
+  const actMinCumplePension = escenarios ? escenarios.pensionActual.pensionNeta < pensionMinimaVigente : false;
+  const actMinAcredita = isLey73 && !asesoriaAhoraCumple && !asesoriaFuturoCumple && !recupAcredita
+    && actMinCumpleEdad && actMinCumpleSemanas && actMinCumpleSinCotizar && actMinCumplePension;
 
   return (
     <main className="flex-1">
@@ -1196,7 +1207,25 @@ export default function Home() {
                       <div>
                         <p className="font-bold text-sm sm:text-lg text-amber-500">Acredita Recuperación de Derechos</p>
                         <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
-                          Perdió derechos — requiere {semanasNuevasRequeridas > 0 ? `${semanasNuevasRequeridas} semanas nuevas (Art. 151)` : "reingreso inmediato"} para recuperar
+                          Perdió derechos — requiere {semanasNuevasRequeridas > 0 ? `${semanasNuevasRequeridas} semanas nuevas ininterrumpidas (Art. 151)` : "cotizar 1 mes en Mod 10"} para recuperar
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (actMinAcredita) {
+                return (
+                  <div className="rounded-xl sm:rounded-[16px] border-2 border-purple-500/40 bg-gradient-to-r from-purple-500/10 to-wv-surface px-4 sm:px-6 py-3 sm:py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="shrink-0 h-10 w-10 rounded-full bg-purple-500/10 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-purple-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20V10" /><path d="M18 20V4" /><path d="M6 20v-4" /></svg>
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm sm:text-lg text-purple-500">Acredita Actualización de Pensión Mínima</p>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
+                          Cotizar 3 meses en Mod 10 para actualizar pensión mínima al año vigente
                         </p>
                       </div>
                     </div>
@@ -1433,7 +1462,7 @@ export default function Home() {
                           <div className="flex items-center justify-between gap-2">
                             <div className="min-w-0">
                               <p className="font-medium text-xs sm:text-sm">
-                                Modalidad 10
+                                Derecho para hacer Modalidad 40
                               </p>
                               <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
                                 RP: {ultimoRegistro?.registroPatronal}
@@ -1544,7 +1573,7 @@ export default function Home() {
 
                 {/* Financiamiento — decisión clave para el asesor */}
                 {edadInfo && (
-                  <div className={`grid grid-cols-1 ${perdioDerechos ? "sm:grid-cols-3" : "sm:grid-cols-2"} gap-2 sm:gap-2.5`}>
+                  <div className={`grid grid-cols-1 ${perdioDerechos && actMinCumpleSinCotizar ? "sm:grid-cols-2 lg:grid-cols-4" : perdioDerechos || actMinCumpleSinCotizar ? "sm:grid-cols-3" : "sm:grid-cols-2"} gap-2 sm:gap-2.5`}>
                     <div
                       className={`rounded-xl sm:rounded-[16px] overflow-hidden border-2 ${asesoriaAhoraCumple ? "border-wv-green/40 bg-gradient-to-br from-wv-surface to-wv-green/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
                     >
@@ -1641,13 +1670,59 @@ export default function Home() {
                             />
                             <SubCheck
                               pass={recupCumpleSemanas}
-                              label="Min. 450 semanas"
+                              label="Min. 430 semanas"
                               value={`${formatInt(semanasTotales)} semanas`}
                             />
                             <SubCheck
                               pass={recupCumpleAfore}
-                              label="AFORE min. $80,000"
+                              label="AFORE min. $40,000"
                               value={formatMXN(saldoAfore)}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {actMinCumpleSinCotizar && (
+                      <div
+                        className={`rounded-xl sm:rounded-[16px] overflow-hidden border-2 ${actMinAcredita ? "border-purple-500/40 bg-gradient-to-br from-wv-surface to-purple-500/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
+                      >
+                        <div className="px-4 sm:px-5 py-3 sm:py-4 space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="font-semibold text-sm sm:text-base">
+                                Act. Pensión Mínima
+                              </p>
+                              <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
+                                Actualizar al año vigente
+                              </p>
+                            </div>
+                            <StatusBadge
+                              pass={actMinAcredita}
+                              labelPass="Acredita"
+                              labelFail="No acredita"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <SubCheck
+                              pass={actMinCumpleEdad}
+                              label="Edad min. 59a 8m"
+                              value={edadExacta ? `${edadExacta.anos}a ${edadExacta.meses}m` : `${edad} años`}
+                            />
+                            <SubCheck
+                              pass={actMinCumpleSemanas}
+                              label="Min. 470 semanas"
+                              value={`${formatInt(semanasTotales)} semanas`}
+                            />
+                            <SubCheck
+                              pass={actMinCumpleSinCotizar}
+                              label="≥ 2 años sin cotizar"
+                              value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m` : "0"}
+                            />
+                            <SubCheck
+                              pass={actMinCumplePension}
+                              label={`Pensión < mínima (${formatMXN(pensionMinimaVigente)})`}
+                              value={escenarios ? formatMXN(escenarios.pensionActual.pensionNeta) : "$0"}
                             />
                           </div>
                         </div>
@@ -1662,7 +1737,7 @@ export default function Home() {
                     <div className={`border-l-4 ${perdioDerechos ? "border-l-amber-500" : "border-l-wv-green"} px-3.5 sm:px-4 py-2.5 sm:py-3 space-y-2 sm:space-y-2.5`}>
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="font-medium text-xs sm:text-sm">Conservación de Derechos</p>
+                          <p className="font-medium text-xs sm:text-sm">Derecho para poderte pensionar</p>
                           <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 leading-tight">
                             Art. 150 — 25% de {formatInt(semanasTotales)} sem = {formatInt(semanasConservacion)} sem ({formatDiasCompleto(diasConservacion)})
                           </p>
@@ -1694,15 +1769,15 @@ export default function Home() {
                           <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Art. 151 — Semanas nuevas para recuperar</p>
                           <p className="text-xs sm:text-sm font-semibold mt-0.5 text-amber-500">
                             {semanasNuevasRequeridas === 0
-                              ? "Reingreso inmediato — se reconocen todas las semanas"
-                              : `${semanasNuevasRequeridas} semanas nuevas requeridas`}
+                              ? "Cotizar 1 mes en Mod 10 para recuperar derechos"
+                              : `${semanasNuevasRequeridas} semanas nuevas ininterrumpidas requeridas`}
                           </p>
                           <p className="text-[9px] text-muted-foreground mt-0.5">
                             {anosDesdePerdida <= 3
-                              ? "Menos de 3 años desde pérdida — reconocimiento inmediato al reingresar"
-                              : anosDesdePerdida <= 6
-                                ? "Entre 3 y 6 años — reconocimiento tras 26 semanas nuevas (≈6 meses)"
-                                : "Más de 6 años — reconocimiento tras 52 semanas nuevas (≈1 año)"}
+                              ? "Menos de 3 años desde pérdida — cotizar 1 mes en Mod 10 para recuperar"
+                              : anosDesdePerdida <= 5
+                                ? "Entre 3 y 5 años — 26 semanas nuevas ininterrumpidas (≈6 meses Mod 10)"
+                                : "Más de 5 años — 52 semanas nuevas ininterrumpidas (≈12 meses Mod 10)"}
                           </p>
                         </div>
                       )}
