@@ -43,6 +43,129 @@ function formatDiasCompleto(totalDias: number): string {
   return parts.join(" ");
 }
 
+interface RightsEvent {
+  type: "lost" | "recovered" | "not_recovered";
+  gapStart: Date;
+  gapEnd: Date;
+  gapDays: number;
+  conservationDays: number;
+  accumulatedWeeks: number;
+  weeksNeeded?: number;
+  weeksWorked?: number;
+}
+
+interface RightsAnalysis {
+  perdioDerechos: boolean;
+  events: RightsEvent[];
+  weeksNeededToRecover: number;
+  lastLossDate: Date | null;
+}
+
+function analyzeRightsHistory(
+  records: { fechaAlta: string; fechaBaja: string }[],
+): RightsAnalysis {
+  const empty: RightsAnalysis = { perdioDerechos: false, events: [], weeksNeededToRecover: 0, lastLossDate: null };
+  if (records.length === 0) return empty;
+
+  const MS_DAY = 1000 * 60 * 60 * 24;
+
+  const sorted = [...records]
+    .map(r => ({ alta: parseDDMMYYYY(r.fechaAlta), baja: parseDDMMYYYY(r.fechaBaja) }))
+    .sort((a, b) => a.alta.getTime() - b.alta.getTime());
+
+  const merged: { alta: Date; baja: Date }[] = [];
+  let cur = { alta: sorted[0].alta, baja: sorted[0].baja };
+  for (let i = 1; i < sorted.length; i++) {
+    const next = sorted[i];
+    if (next.alta.getTime() <= cur.baja.getTime() + MS_DAY) {
+      if (next.baja.getTime() > cur.baja.getTime()) cur.baja = next.baja;
+    } else {
+      merged.push({ ...cur });
+      cur = { alta: next.alta, baja: next.baja };
+    }
+  }
+  merged.push({ ...cur });
+
+  let accDays = 0;
+  let hasRights = true;
+  let lossDate: Date | null = null;
+  const events: RightsEvent[] = [];
+
+  for (let i = 0; i < merged.length; i++) {
+    const period = merged[i];
+    const periodDays = Math.floor((period.baja.getTime() - period.alta.getTime()) / MS_DAY) + 1;
+
+    if (!hasRights && lossDate) {
+      const daysSinceLoss = Math.floor((period.alta.getTime() - lossDate.getTime()) / MS_DAY);
+      const yearsSinceLoss = daysSinceLoss / 365;
+      const weeksNeeded = yearsSinceLoss <= 3 ? 0 : yearsSinceLoss <= 5 ? 26 : 52;
+      const weeksWorked = Math.floor(periodDays / 7);
+
+      if (weeksNeeded === 0 || weeksWorked >= weeksNeeded) {
+        hasRights = true;
+        events.push({
+          type: "recovered", gapStart: merged[i - 1]?.baja ?? period.alta, gapEnd: period.alta,
+          gapDays: daysSinceLoss, conservationDays: 0, accumulatedWeeks: Math.floor(accDays / 7),
+          weeksNeeded, weeksWorked,
+        });
+        lossDate = null;
+      } else {
+        events.push({
+          type: "not_recovered", gapStart: merged[i - 1]?.baja ?? period.alta, gapEnd: period.alta,
+          gapDays: daysSinceLoss, conservationDays: 0, accumulatedWeeks: Math.floor(accDays / 7),
+          weeksNeeded, weeksWorked,
+        });
+      }
+    }
+
+    accDays += periodDays;
+
+    if (i < merged.length - 1) {
+      const nextPeriod = merged[i + 1];
+      const gapDays = Math.floor((nextPeriod.alta.getTime() - period.baja.getTime()) / MS_DAY);
+      const accWeeks = Math.floor(accDays / 7);
+      const conservationWeeks = Math.max(52, Math.floor(accWeeks * 0.25));
+      const conservationDaysCap = conservationWeeks * 7;
+
+      if (hasRights && gapDays > conservationDaysCap) {
+        hasRights = false;
+        const expirationMs = period.baja.getTime() + conservationDaysCap * MS_DAY;
+        lossDate = new Date(expirationMs);
+        events.push({
+          type: "lost", gapStart: period.baja, gapEnd: nextPeriod.alta,
+          gapDays, conservationDays: conservationDaysCap, accumulatedWeeks: accWeeks,
+        });
+      }
+    } else if (hasRights) {
+      const today = new Date();
+      const gapDays = Math.floor((today.getTime() - period.baja.getTime()) / MS_DAY);
+      const accWeeks = Math.floor(accDays / 7);
+      const conservationWeeks = Math.max(52, Math.floor(accWeeks * 0.25));
+      const conservationDaysCap = conservationWeeks * 7;
+
+      if (gapDays > conservationDaysCap) {
+        hasRights = false;
+        const expirationMs = period.baja.getTime() + conservationDaysCap * MS_DAY;
+        lossDate = new Date(expirationMs);
+        events.push({
+          type: "lost", gapStart: period.baja, gapEnd: today,
+          gapDays, conservationDays: conservationDaysCap, accumulatedWeeks: accWeeks,
+        });
+      }
+    }
+  }
+
+  let weeksNeededToRecover = 0;
+  if (!hasRights && lossDate) {
+    const today = new Date();
+    const daysSinceLoss = Math.floor((today.getTime() - lossDate.getTime()) / MS_DAY);
+    const yearsSinceLoss = daysSinceLoss / 365;
+    weeksNeededToRecover = yearsSinceLoss <= 3 ? 0 : yearsSinceLoss <= 5 ? 26 : 52;
+  }
+
+  return { perdioDerechos: !hasRights, events, weeksNeededToRecover, lastLossDate: lossDate };
+}
+
 interface RangoEdad {
   semanas: number;
   edadMinima: number;
@@ -697,12 +820,23 @@ export default function Home() {
   // Art. 150: Conservación de derechos = 25% de semanas cotizadas (mín 52 sem = 1 año)
   const semanasConservacion = Math.max(52, Math.floor(semanasTotales * 0.25));
   const diasConservacion = semanasConservacion * 7;
-  const perdioDerechos = diasSinCotizar > diasConservacion;
+  const perdioDerechosSimple = diasSinCotizar > diasConservacion;
+
+  // Rastreabilidad histórica de derechos — analiza gaps y recuperaciones en toda la vida laboral
+  const rightsHistory = useMemo(() => {
+    if (!result) return null;
+    return analyzeRightsHistory(result.records);
+  }, [result]);
+  const perdioDerechos = rightsHistory?.perdioDerechos ?? perdioDerechosSimple;
 
   // Art. 151: Recuperación — semanas nuevas requeridas según tiempo desde pérdida
-  const diasDesdePerdida = Math.max(0, diasSinCotizar - diasConservacion);
+  const semanasNuevasRequeridas = rightsHistory?.weeksNeededToRecover ?? (
+    perdioDerechosSimple ? ((() => { const d = Math.max(0, diasSinCotizar - diasConservacion) / 365; return d <= 3 ? 0 : d <= 5 ? 26 : 52; })()) : 0
+  );
+  const diasDesdePerdida = rightsHistory?.lastLossDate
+    ? Math.floor((Date.now() - rightsHistory.lastLossDate.getTime()) / (1000 * 60 * 60 * 24))
+    : Math.max(0, diasSinCotizar - diasConservacion);
   const anosDesdePerdida = diasDesdePerdida / 365;
-  const semanasNuevasRequeridas = anosDesdePerdida <= 3 ? 0 : anosDesdePerdida <= 5 ? 26 : 52;
 
   // Filtros de negocio para financiamiento de recuperación
   const recupCumpleEdad = edad >= 59;
@@ -751,8 +885,9 @@ export default function Home() {
   }, [result, edadInfo?.fechaNacimiento, ultimaCotizacion, pensionResult, esposa, hijos]);
 
   const actMinCumplePension = escenarios ? escenarios.pensionActual.pensionNeta < pensionMinimaVigente : false;
+  // Pensión < mínima se muestra pero NO se usa como limitante (fórmula pendiente de corrección)
   const actMinAcredita = isLey73 && !asesoriaAhoraCumple && !asesoriaFuturoCumple && !recupAcredita
-    && actMinCumpleEdad && actMinCumpleSemanas && actMinCumpleSinCotizar && actMinCumplePension;
+    && actMinCumpleEdad && actMinCumpleSemanas && actMinCumpleSinCotizar;
 
   return (
     <main className="flex-1">
@@ -1573,7 +1708,7 @@ export default function Home() {
 
                 {/* Financiamiento — decisión clave para el asesor */}
                 {edadInfo && (
-                  <div className={`grid grid-cols-1 ${perdioDerechos && actMinCumpleSinCotizar ? "sm:grid-cols-2 lg:grid-cols-4" : perdioDerechos || actMinCumpleSinCotizar ? "sm:grid-cols-3" : "sm:grid-cols-2"} gap-2 sm:gap-2.5`}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-2.5">
                     <div
                       className={`rounded-xl sm:rounded-[16px] overflow-hidden border-2 ${asesoriaAhoraCumple ? "border-wv-green/40 bg-gradient-to-br from-wv-surface to-wv-green/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
                     >
@@ -1642,92 +1777,88 @@ export default function Home() {
                       </div>
                     </div>
 
-                    {perdioDerechos && (
-                      <div
-                        className={`rounded-xl sm:rounded-[16px] overflow-hidden border-2 ${recupAcredita ? "border-amber-500/40 bg-gradient-to-br from-wv-surface to-amber-500/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
-                      >
-                        <div className="px-4 sm:px-5 py-3 sm:py-4 space-y-2.5">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="font-semibold text-sm sm:text-base">
-                                Recuperación de Derechos
-                              </p>
-                              <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
-                                Reingreso vía Mod 10
-                              </p>
-                            </div>
-                            <StatusBadge
-                              pass={recupAcredita}
-                              labelPass="Acredita"
-                              labelFail="No acredita"
-                            />
+                    <div
+                      className={`rounded-xl sm:rounded-[16px] overflow-hidden border-2 ${recupAcredita ? "border-amber-500/40 bg-gradient-to-br from-wv-surface to-amber-500/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
+                    >
+                      <div className="px-4 sm:px-5 py-3 sm:py-4 space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-sm sm:text-base">
+                              Recuperación de Derechos
+                            </p>
+                            <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
+                              Reingreso vía Mod 10
+                            </p>
                           </div>
-                          <div className="space-y-1.5">
-                            <SubCheck
-                              pass={recupCumpleEdad}
-                              label="Edad min. 59"
-                              value={`${edad} años`}
-                            />
-                            <SubCheck
-                              pass={recupCumpleSemanas}
-                              label="Min. 430 semanas"
-                              value={`${formatInt(semanasTotales)} semanas`}
-                            />
-                            <SubCheck
-                              pass={recupCumpleAfore}
-                              label="AFORE min. $40,000"
-                              value={formatMXN(saldoAfore)}
-                            />
-                          </div>
+                          <StatusBadge
+                            pass={recupAcredita}
+                            labelPass="Acredita"
+                            labelFail="No acredita"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <SubCheck
+                            pass={recupCumpleEdad}
+                            label="Edad min. 59"
+                            value={`${edad} años`}
+                          />
+                          <SubCheck
+                            pass={recupCumpleSemanas}
+                            label="Min. 430 semanas"
+                            value={`${formatInt(semanasTotales)} semanas`}
+                          />
+                          <SubCheck
+                            pass={recupCumpleAfore}
+                            label="AFORE min. $40,000"
+                            value={formatMXN(saldoAfore)}
+                          />
                         </div>
                       </div>
-                    )}
+                    </div>
 
-                    {actMinCumpleSinCotizar && (
-                      <div
-                        className={`rounded-xl sm:rounded-[16px] overflow-hidden border-2 ${actMinAcredita ? "border-purple-500/40 bg-gradient-to-br from-wv-surface to-purple-500/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
-                      >
-                        <div className="px-4 sm:px-5 py-3 sm:py-4 space-y-2.5">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="font-semibold text-sm sm:text-base">
-                                Act. Pensión Mínima
-                              </p>
-                              <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
-                                Actualizar al año vigente
-                              </p>
-                            </div>
-                            <StatusBadge
-                              pass={actMinAcredita}
-                              labelPass="Acredita"
-                              labelFail="No acredita"
-                            />
+                    <div
+                      className={`rounded-xl sm:rounded-[16px] overflow-hidden border-2 ${actMinAcredita ? "border-purple-500/40 bg-gradient-to-br from-wv-surface to-purple-500/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
+                    >
+                      <div className="px-4 sm:px-5 py-3 sm:py-4 space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-sm sm:text-base">
+                              Act. Pensión Mínima
+                            </p>
+                            <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
+                              Actualizar al año vigente
+                            </p>
                           </div>
-                          <div className="space-y-1.5">
-                            <SubCheck
-                              pass={actMinCumpleEdad}
-                              label="Edad min. 59a 8m"
-                              value={edadExacta ? `${edadExacta.anos}a ${edadExacta.meses}m` : `${edad} años`}
-                            />
-                            <SubCheck
-                              pass={actMinCumpleSemanas}
-                              label="Min. 470 semanas"
-                              value={`${formatInt(semanasTotales)} semanas`}
-                            />
-                            <SubCheck
-                              pass={actMinCumpleSinCotizar}
-                              label="≥ 2 años sin cotizar"
-                              value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m` : "0"}
-                            />
-                            <SubCheck
-                              pass={actMinCumplePension}
-                              label={`Pensión < mínima (${formatMXN(pensionMinimaVigente)})`}
-                              value={escenarios ? formatMXN(escenarios.pensionActual.pensionNeta) : "$0"}
-                            />
-                          </div>
+                          <StatusBadge
+                            pass={actMinAcredita}
+                            labelPass="Acredita"
+                            labelFail="No acredita"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <SubCheck
+                            pass={actMinCumpleEdad}
+                            label="Edad min. 59a 8m"
+                            value={edadExacta ? `${edadExacta.anos}a ${edadExacta.meses}m` : `${edad} años`}
+                          />
+                          <SubCheck
+                            pass={actMinCumpleSemanas}
+                            label="Min. 470 semanas"
+                            value={`${formatInt(semanasTotales)} semanas`}
+                          />
+                          <SubCheck
+                            pass={actMinCumpleSinCotizar}
+                            label="≥ 2 años sin cotizar"
+                            value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m` : "0"}
+                          />
+                          <SubCheck
+                            pass={actMinCumplePension}
+                            label={`Pensión < mínima (${formatMXN(pensionMinimaVigente)})`}
+                            value={escenarios ? formatMXN(escenarios.pensionActual.pensionNeta) : "$0"}
+                          />
                         </div>
                       </div>
-                    )}
+                    </div>
                   </div>
                 )}
 
@@ -1739,7 +1870,9 @@ export default function Home() {
                         <div className="min-w-0">
                           <p className="font-medium text-xs sm:text-sm">Derecho para poderte pensionar</p>
                           <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 leading-tight">
-                            Art. 150 — 25% de {formatInt(semanasTotales)} sem = {formatInt(semanasConservacion)} sem ({formatDiasCompleto(diasConservacion)})
+                            {perdioDerechos && !perdioDerechosSimple
+                              ? "Perdió derechos en historial laboral y no los recuperó"
+                              : `Art. 150 — 25% de ${formatInt(semanasTotales)} sem = ${formatInt(semanasConservacion)} sem (${formatDiasCompleto(diasConservacion)})`}
                           </p>
                         </div>
                         <StatusBadge
@@ -1765,7 +1898,7 @@ export default function Home() {
                       </div>
 
                       {perdioDerechos && (
-                        <div className="rounded-lg p-2.5 border border-amber-500/20 bg-amber-500/5">
+                        <div className="rounded-lg p-2.5 border border-amber-500/20 bg-amber-500/5 space-y-2">
                           <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Art. 151 — Semanas nuevas para recuperar</p>
                           <p className="text-xs sm:text-sm font-semibold mt-0.5 text-amber-500">
                             {semanasNuevasRequeridas === 0
@@ -1779,6 +1912,21 @@ export default function Home() {
                                 ? "Entre 3 y 5 años — 26 semanas nuevas ininterrumpidas (≈6 meses Mod 10)"
                                 : "Más de 5 años — 52 semanas nuevas ininterrumpidas (≈12 meses Mod 10)"}
                           </p>
+                          {rightsHistory && rightsHistory.events.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Rastreabilidad histórica</p>
+                              {rightsHistory.events.map((evt, idx) => (
+                                <div key={idx} className={`flex items-start gap-2 text-[10px] sm:text-xs ${evt.type === "recovered" ? "text-wv-green" : "text-amber-500"}`}>
+                                  <span className="shrink-0 mt-0.5">{evt.type === "recovered" ? "✓" : evt.type === "not_recovered" ? "✗" : "⚠"}</span>
+                                  <span>
+                                    {evt.type === "lost" && `Perdió derechos — gap de ${formatDiasCompleto(evt.gapDays)} (conservación: ${formatDiasCompleto(evt.conservationDays)}) entre ${evt.gapStart.toLocaleDateString("es-MX", { timeZone: "UTC" })} y ${evt.gapEnd.toLocaleDateString("es-MX", { timeZone: "UTC" })}`}
+                                    {evt.type === "not_recovered" && `No recuperó — cotizó ${evt.weeksWorked} sem (necesitaba ${evt.weeksNeeded}) entre ${evt.gapStart.toLocaleDateString("es-MX", { timeZone: "UTC" })} y ${evt.gapEnd.toLocaleDateString("es-MX", { timeZone: "UTC" })}`}
+                                    {evt.type === "recovered" && `Recuperó derechos — cotizó ${evt.weeksWorked} sem (necesitaba ${evt.weeksNeeded})`}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
 
