@@ -65,18 +65,17 @@ export function RetirosDesempleo({
   const vpsBase =
     semanasReconocidas > 0 ? totalRCVBruto / semanasReconocidas : 0;
 
-  const avgSBC = useMemo(() => {
-    if (retiros.length === 0) return 0;
-    return retiros.reduce((sum, r) => sum + r.salarioDiario, 0) / retiros.length;
-  }, [retiros]);
-
-  const getVPS = useCallback(
-    (idx: number) => {
-      if (avgSBC === 0 || vpsBase === 0) return vpsBase;
-      return vpsBase * (retiros[idx].salarioDiario / avgSBC);
-    },
-    [vpsBase, avgSBC, retiros]
+  const totalMontoRetiros = useMemo(
+    () => retiros.reduce((sum, r) => sum + r.montoRetiro, 0),
+    [retiros]
   );
+
+  const effectiveVPS = useMemo(() => {
+    if (semanasDescontadas > 0 && totalMontoRetiros > 0) {
+      return totalMontoRetiros / semanasDescontadas;
+    }
+    return vpsBase;
+  }, [semanasDescontadas, totalMontoRetiros, vpsBase]);
 
   const fechasBaja = useMemo(
     () => retiros.map((r) => parseDDMMYYYY(r.fechaBaja).getTime()),
@@ -114,23 +113,6 @@ export function RetirosDesempleo({
 
   const restantes = semanasDescontadas - totales.semanas;
 
-  function toggleSelection(idx: number) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(idx)) {
-        next.delete(idx);
-        setRowData((prev) => {
-          const next = { ...prev };
-          delete next[idx];
-          return next;
-        });
-      } else {
-        next.add(idx);
-      }
-      return next;
-    });
-  }
-
   const semanasUsadasPorOtros = useCallback(
     (idx: number) => {
       let sum = 0;
@@ -146,14 +128,37 @@ export function RetirosDesempleo({
     (idx: number) => {
       const semConstancia = Math.max(0, semanasDescontadas - semanasUsadasPorOtros(idx));
       const montoRetiro = retiros[idx].montoRetiro;
-      const vps = getVPS(idx);
-      const semPorMonto = vps > 0 ? Math.floor(montoRetiro / vps) : semConstancia;
+      const semPorMonto = effectiveVPS > 0 ? Math.ceil(montoRetiro / effectiveVPS) : semConstancia;
       const maxSem = Math.min(semConstancia, semPorMonto);
-      const maxMonto = Math.min(montoRetiro, Math.round(semConstancia * vps * 100) / 100);
-      return { maxSem, maxMonto, vps };
+      const maxMonto = Math.min(montoRetiro, Math.round(semConstancia * effectiveVPS * 100) / 100);
+      return { maxSem, maxMonto, vps: effectiveVPS };
     },
-    [semanasDescontadas, semanasUsadasPorOtros, retiros, getVPS]
+    [semanasDescontadas, semanasUsadasPorOtros, retiros, effectiveVPS]
   );
+
+  function toggleSelection(idx: number) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) {
+        next.delete(idx);
+        setRowData((prev) => {
+          const next = { ...prev };
+          delete next[idx];
+          return next;
+        });
+      } else {
+        next.add(idx);
+        const used = Object.values(rowData).reduce((s, v) => s + v.semanas, 0);
+        const remaining = Math.max(0, semanasDescontadas - used);
+        const idealSem = effectiveVPS > 0 ? Math.round(retiros[idx].montoRetiro / effectiveVPS) : remaining;
+        const maxForRetiro = effectiveVPS > 0 ? Math.ceil(retiros[idx].montoRetiro / effectiveVPS) : remaining;
+        const sem = remaining <= maxForRetiro ? remaining : Math.min(idealSem, remaining);
+        const monto = Math.round(sem * effectiveVPS * 100) / 100;
+        setRowData((prev) => ({ ...prev, [idx]: { semanas: sem, monto } }));
+      }
+      return next;
+    });
+  }
 
   const handleSemanasChange = useCallback(
     (idx: number, value: string) => {
@@ -304,7 +309,7 @@ export function RetirosDesempleo({
                           {formatMXN(r.topeMensual)}
                         </td>
                         <td className="py-2 pr-3 text-right font-mono text-muted-foreground">
-                          {formatMXN(getVPS(i))}
+                          {formatMXN(effectiveVPS)}
                         </td>
                         <td className="py-2 pr-3 text-right">
                           {isSelected ? (
@@ -356,27 +361,25 @@ export function RetirosDesempleo({
             {/* Reference values */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
               <div className="bg-muted/60 rounded-lg p-2">
-                <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Saldo RCV bruto</p>
-                <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{formatMXN(totalRCVBruto)}</p>
+                <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Monto total retiros</p>
+                <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{formatMXN(totalMontoRetiros)}</p>
               </div>
               <div className="bg-muted/60 rounded-lg p-2">
-                <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Sem. reconocidas</p>
-                <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{formatInt(semanasReconocidas)}</p>
+                <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Sem. descontadas</p>
+                <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{formatInt(semanasDescontadas)}</p>
               </div>
               <div className="bg-muted/60 rounded-lg p-2">
-                <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">VPS base</p>
-                <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{vpsBase > 0 ? formatMXN(vpsBase) : "—"}</p>
+                <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">VPS reintegro</p>
+                <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{effectiveVPS > 0 ? formatMXN(effectiveVPS) : "—"}</p>
               </div>
               <div className="bg-muted/60 rounded-lg p-2">
-                <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">SBC promedio</p>
-                <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{avgSBC > 0 ? formatMXN(avgSBC) : "—"}</p>
+                <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">VPS actual</p>
+                <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5 text-muted-foreground">{vpsBase > 0 ? formatMXN(vpsBase) : "—"}</p>
               </div>
             </div>
-            {vpsBase > 0 && (
-              <p className="text-[10px] sm:text-[11px] text-muted-foreground">
-                VPS = RCV bruto ÷ sem. reconocidas, ajustado por SBC de cada periodo (VPS × SBC<sub>i</sub> / SBC<sub>prom</sub>)
-              </p>
-            )}
+            <p className="text-[10px] sm:text-[11px] text-muted-foreground">
+              VPS reintegro = monto total retiros ÷ sem. descontadas (concilia con constancia). VPS actual = RCV bruto ÷ sem. reconocidas (referencia).
+            </p>
 
             {/* Summary footer */}
             {selected.size > 0 && totales.semanas > 0 && (
