@@ -614,8 +614,27 @@ function SubCheck({
   );
 }
 
-function DetailToggle({ label, children, defaultOpen = false }: { label?: string; children: React.ReactNode; defaultOpen?: boolean }) {
+function DetailToggle({ label, children, defaultOpen = false, section = false }: { label?: string; children: React.ReactNode; defaultOpen?: boolean; section?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
+  if (section) {
+    return (
+      <div>
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="w-full flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 text-sm font-semibold hover:bg-wv-border/20 transition-colors cursor-pointer"
+        >
+          <svg className={`w-3.5 h-3.5 transition-transform ${open ? "rotate-90" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+          {label}
+        </button>
+        {open && (
+          <div className="pb-3 sm:pb-4">
+            {children}
+          </div>
+        )}
+      </div>
+    );
+  }
   return (
     <div className="mt-2 pt-2 border-t border-wv-border/50">
       <button
@@ -925,6 +944,23 @@ export default function Home() {
     ? new Date(ultimaCotizacion.getTime() + diasConservacion * 86400000)
     : null;
   const vigenciaPensionActiva = vigenciaPension ? vigenciaPension.getTime() > Date.now() : false;
+
+  const cumpleModalidad = modalidad === "mod10" ? mod10Cumple : modalidad === "mod40" ? mod40Cumple : true;
+  const pasaFiltrosBase = isLey73 && cumpleSemanas && cumpleModalidad && !calDescalificado;
+  const acreditaAhora = pasaFiltrosBase && cumpleAforeConReintegro && asesoriaAhoraCumple;
+  const acreditaFuturo = pasaFiltrosBase && cumpleAforeConReintegro && asesoriaFuturoCumple;
+  const acreditaRecuperacion = isLey73 && !calDescalificado && !acreditaAhora && !acreditaFuturo && recupAcredita;
+
+  const calificacionLabel = !result ? null
+    : calDescalificado ? (calPensionado === "definitivo" ? "Pensionado definitivo" : calNecesidad === "no" ? "No necesita financiamiento" : calSimulacion === "si_no_timbrados" ? "Simulación no timbrada" : calDemandas === "avanzada" ? "Demanda avanzada" : "Descalificado")
+    : !isLey73 ? "Régimen Ley 97"
+    : acreditaAhora ? "Acredita Financiamiento Ahora"
+    : acreditaFuturo ? "Acredita Financiamiento Futuro"
+    : acreditaRecuperacion ? "Acredita Recuperación de Derechos"
+    : actMinAcredita ? "Acredita Actualización Pensión Mínima"
+    : comp500Acredita ? "Califica Completar 500 Semanas"
+    : null;
+  const calificacionPositiva = acreditaAhora || acreditaFuturo || acreditaRecuperacion || actMinAcredita || comp500Acredita;
 
   return (
     <main className="flex-1">
@@ -1272,12 +1308,19 @@ export default function Home() {
                   )}
                 </div>
               </div>
+              {calificacionLabel && (
+                <div className="mt-2">
+                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${calificacionPositiva ? "bg-wv-green/15 text-wv-green" : "bg-wv-red/15 text-wv-red"}`}>
+                    {calificacionLabel}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Calificación — formulario interactivo */}
             {isLey73 && (
               <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden no-print">
-                <DetailToggle label="Calificación" defaultOpen={true}><div className="space-y-3">
+                <DetailToggle label="Calificación" defaultOpen={false} section><div className="space-y-3 px-4 sm:px-5">
 
                 {/* 1. ¿Está pensionado? */}
                 <div className="space-y-1.5">
@@ -1405,48 +1448,56 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* 6. Reintegro de semanas */}
-                {!calDescalificado && result.header.semanasDescontadas > 0 && (
-                  <div className="space-y-1.5">
-                    <p className="text-xs sm:text-sm font-medium">Reintegro de semanas descontadas</p>
-                    <p className="text-[10px] sm:text-[11px] text-muted-foreground">
-                      {result.header.semanasDescontadas} semanas descontadas — cálculo de apoyo: {formatMXN(result.retirosDesempleo?.totalDevolver ?? 0)}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium">Registrar monto a reintegrar:</span>
-                      <div className="relative">
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={calReintegroManual !== null ? formatInt(calReintegroManual) : formatInt(result.retirosDesempleo?.totalDevolver ?? 0)}
-                          onChange={(e) => {
-                            const raw = e.target.value.replace(/[^0-9]/g, "");
-                            setCalReintegroManual(raw ? Math.max(0, Number(raw)) : 0);
-                          }}
-                          placeholder="0"
-                          className="w-32 rounded-lg border border-wv-border bg-background pl-6 pr-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-wv-cyan focus:border-transparent"
-                        />
-                      </div>
-                    </div>
-                    <p className="text-[9px] text-muted-foreground">
-                      El monto de reintegro se suma al AFORE requerido solo para Ahora y Futuro
-                    </p>
-                  </div>
-                )}
-                {!calDescalificado && result.header.semanasDescontadas === 0 && (
-                  <div className="space-y-1">
-                    <p className="text-xs sm:text-sm font-medium">Reintegro de semanas</p>
-                    <p className="text-[10px] text-muted-foreground">No tiene semanas descontadas — no aplica reintegro</p>
-                  </div>
-                )}
-
                 {calDescalificado && (
                   <div className="rounded-lg p-3 bg-wv-red/10 border border-wv-red/20">
                     <p className="text-xs font-medium text-wv-red">Descalificado — no califica para ningún financiamiento</p>
                   </div>
                 )}
                 </div></DetailToggle>
+              </section>
+            )}
+
+            {/* Retiros por Desempleo — moved up per mockup */}
+            {isLey73 &&
+              (result.retirosDesempleo.retiros.length > 0 ||
+                result.header.semanasDescontadas > 0) && (
+                <section>
+                  <RetirosDesempleo
+                    retiros={result.retirosDesempleo.retiros}
+                    semanasDescontadas={result.header.semanasDescontadas}
+                    totalRCVBruto={result.afore.totalRCVBruto}
+                    semanasReconocidas={result.header.semanasReconocidas}
+                  />
+                </section>
+              )}
+
+            {/* Reintegro de semanas — independent section */}
+            {isLey73 && !calDescalificado && result.header.semanasDescontadas > 0 && (
+              <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none px-4 sm:px-5 py-3 sm:py-4 space-y-1.5">
+                <p className="text-xs sm:text-sm font-medium">Reintegro de semanas descontadas</p>
+                <p className="text-[10px] sm:text-[11px] text-muted-foreground">
+                  {result.header.semanasDescontadas} semanas descontadas — cálculo de apoyo: {formatMXN(result.retirosDesempleo?.totalDevolver ?? 0)}
+                </p>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium">Registrar monto a reintegrar:</span>
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={calReintegroManual !== null ? formatInt(calReintegroManual) : formatInt(result.retirosDesempleo?.totalDevolver ?? 0)}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace(/[^0-9]/g, "");
+                        setCalReintegroManual(raw ? Math.max(0, Number(raw)) : 0);
+                      }}
+                      placeholder="0"
+                      className="w-32 rounded-lg border border-wv-border bg-background pl-6 pr-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-wv-cyan focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                <p className="text-[9px] text-muted-foreground">
+                  El monto de reintegro se suma al AFORE requerido solo para Ahora y Futuro
+                </p>
               </section>
             )}
 
@@ -1485,12 +1536,6 @@ export default function Home() {
               if (!cumpleAfore) razones.push(`Faltante AFORE: ${formatMXN(faltante)}`);
               if (modalidad === "mod10" && !mod10Cumple) razones.push("No cumple Modalidad 10");
               if (modalidad === "mod40" && !mod40Cumple) razones.push("No cumple Modalidad 40");
-
-              const cumpleModalidad = modalidad === "mod10" ? mod10Cumple : modalidad === "mod40" ? mod40Cumple : true;
-              const pasaFiltrosBase = isLey73 && cumpleSemanas && cumpleModalidad && !calDescalificado;
-              const acreditaAhora = pasaFiltrosBase && cumpleAforeConReintegro && asesoriaAhoraCumple;
-              const acreditaFuturo = pasaFiltrosBase && cumpleAforeConReintegro && asesoriaFuturoCumple;
-              const acreditaRecuperacion = isLey73 && !calDescalificado && !acreditaAhora && !acreditaFuturo && recupAcredita;
 
               if (calDescalificado) {
                 const motivo = calPensionado === "definitivo" ? "Pensionado definitivo"
@@ -1635,7 +1680,7 @@ export default function Home() {
 
             {/* Validations — collapsible */}
             <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-              <DetailToggle label="Financiamiento Modalidad 40 Retroactivo" defaultOpen={false}>
+              <DetailToggle label="Datos de Venta" defaultOpen={false} section>
               <div className="space-y-2 sm:space-y-2.5">
                 {/* Ley 73 */}
                 <div className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5">
@@ -2027,26 +2072,6 @@ export default function Home() {
               </DetailToggle>
             </section>
 
-            {/* Retiros Parciales por Desempleo */}
-            {isLey73 &&
-              (result.retirosDesempleo.retiros.length > 0 ||
-                result.header.semanasDescontadas > 0) && (
-                <section>
-                  <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
-                    <div className="h-4 w-1 rounded-full bg-wv-red" />
-                    <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">
-                      Retiros por Desempleo
-                    </h2>
-                  </div>
-                  <RetirosDesempleo
-                    retiros={result.retirosDesempleo.retiros}
-                    semanasDescontadas={result.header.semanasDescontadas}
-                    totalRCVBruto={result.afore.totalRCVBruto}
-                    semanasReconocidas={result.header.semanasReconocidas}
-                  />
-                </section>
-              )}
-
             {!isLey73 && (
               <div className="text-center py-2">
                 <Button onClick={handleReset}>Subir otro PDF</Button>
@@ -2056,8 +2081,8 @@ export default function Home() {
             {isLey73 && (
               <>
                 <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-                  <DetailToggle label="AFORE" defaultOpen={false}>
-                    <ResultsSummary
+                  <DetailToggle label="AFORE" defaultOpen={false} section>
+                    <div className="px-4 sm:px-5"><ResultsSummary
                       saldoAforeRegresar={saldoAfore}
                       saldoSAR={
                         result.afore.totalSAR92 + result.afore.retiro.total
@@ -2067,14 +2092,14 @@ export default function Home() {
                     />
                     <div className="mt-3">
                       <AforeBreakdown afore={result.afore} />
-                    </div>
+                    </div></div>
                   </DetailToggle>
                 </section>
 
                 {/* Información del Lead */}
                 <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-                  <DetailToggle label="Información del Lead" defaultOpen={false}>
-                    <div className="space-y-1.5 text-xs sm:text-sm">
+                  <DetailToggle label="Información del Lead" defaultOpen={false} section>
+                    <div className="space-y-1.5 text-xs sm:text-sm px-4 sm:px-5">
                       <div className="flex gap-2">
                         <span className="text-muted-foreground">Ley 73</span>
                         <span className={isLey73 ? "text-wv-green font-bold" : "text-wv-red font-bold"}>{isLey73 ? "Sí" : "No"}</span>
@@ -2154,8 +2179,8 @@ export default function Home() {
                 {/* Datos de Venta — condicional */}
                 {escenarios && (
                   <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-                    <DetailToggle label="Datos de Venta" defaultOpen={!calDescalificado && (asesoriaAhoraCumple || asesoriaFuturoCumple)}>
-                      <div className="space-y-1.5 text-xs sm:text-sm">
+                    <DetailToggle label="Datos de Venta" defaultOpen={!calDescalificado && (asesoriaAhoraCumple || asesoriaFuturoCumple)} section>
+                      <div className="space-y-1.5 text-xs sm:text-sm px-4 sm:px-5">
                         <div className="flex gap-2">
                           <span className="text-muted-foreground">Semanas cotizadas</span>
                           <span className="font-mono font-bold">{formatInt(result.header.totalSemanasCotizadas)}</span>
@@ -2205,18 +2230,22 @@ export default function Home() {
                 )}
 
                 <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-                  <DetailToggle label="Promedio Salarial" defaultOpen={false}>
+                  <DetailToggle label="Promedio Salarial" defaultOpen={false} section>
+                    <div className="px-4 sm:px-5">
                     <SalaryAverageBreakdown
                       promedio={result.salaryAverage.promedio}
                       periods={result.salaryAverage.periods}
                     />
+                    </div>
                   </DetailToggle>
                 </section>
 
                 {result.records.length > 0 && (
                   <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-                    <DetailToggle label="Historial Laboral" defaultOpen={false}>
+                    <DetailToggle label="Historial Laboral" defaultOpen={false} section>
+                      <div className="px-4 sm:px-5">
                       <EmploymentTimeline records={result.records} />
+                      </div>
                     </DetailToggle>
                   </section>
                 )}

@@ -9,7 +9,7 @@ function ReferenceToggle() {
     <div className="border-t border-wv-border/50 pt-3">
       <button onClick={() => setOpen(!open)} className="flex items-center gap-1.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors">
         <svg className={`w-3 h-3 transition-transform ${open ? "rotate-90" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
-        Referencia — Art. 191 y 198 LSS
+        Diferencial — Art. 151 y 198 LSS
       </button>
       {open && (
         <div className="text-[10px] sm:text-[11px] text-muted-foreground space-y-1 mt-2">
