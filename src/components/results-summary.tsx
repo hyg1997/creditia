@@ -7,9 +7,6 @@ interface ResultsSummaryProps {
   saldoSAR: number;
   saldoRCV: number;
   saldoVivienda: number;
-  promedioSalarial: number;
-  totalSemanas: number;
-  totalRecords: number;
 }
 
 export function ResultsSummary({
@@ -17,9 +14,6 @@ export function ResultsSummary({
   saldoSAR,
   saldoRCV,
   saldoVivienda,
-  promedioSalarial,
-  totalSemanas,
-  totalRecords,
 }: ResultsSummaryProps) {
   return (
     <div className="space-y-2 sm:space-y-3">
@@ -79,32 +73,6 @@ export function ResultsSummary({
         </div>
       </div>
 
-      {/* Row 3: Promedio Salarial + Semanas — 2 columns */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-3">
-        <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none p-3.5 sm:p-5">
-          <p className="text-[10px] sm:text-[11px] uppercase tracking-wider text-wv-label font-medium">
-            Promedio Salarial
-          </p>
-          <p className="text-xl sm:text-[28px] font-bold font-mono leading-tight mt-1 tracking-tight">
-            {formatMXN(promedioSalarial)}
-          </p>
-          <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-1 sm:mt-1.5">
-            Diario | {formatMXN(promedioSalarial * 30.4)} mensual
-          </p>
-        </div>
-
-        <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none p-3.5 sm:p-5">
-          <p className="text-[10px] sm:text-[11px] uppercase tracking-wider text-wv-label font-medium">
-            Semanas Cotizadas
-          </p>
-          <p className="text-xl sm:text-[28px] font-bold font-mono leading-tight mt-1 tracking-tight">
-            {totalSemanas}
-          </p>
-          <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-1 sm:mt-1.5">
-            {totalRecords > 0 ? `${totalRecords} registros laborales` : "Datos extraídos del PDF"}
-          </p>
-        </div>
-      </div>
     </div>
   );
 }

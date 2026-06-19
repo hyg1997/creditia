@@ -557,8 +557,8 @@ interface ApiResult {
 
 function StatusBadge({
   pass,
-  labelPass = "Cumple",
-  labelFail = "No cumple",
+  labelPass = "Acredita",
+  labelFail = "No acredita",
 }: {
   pass: boolean;
   labelPass?: string;
@@ -603,27 +603,25 @@ function SubCheck({
   value: string;
 }) {
   return (
-    <div
-      className={`rounded-lg p-2 sm:p-2.5 border ${pass ? "bg-wv-green/5 border-wv-green/20" : "bg-wv-red/5 border-wv-red/20"}`}
-    >
-      <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+    <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
+      <span className={`uppercase text-[9px] sm:text-[10px] tracking-wider font-medium ${pass ? "text-muted-foreground" : "text-wv-red"}`}>
         {label}
-      </p>
-      <p className="text-xs sm:text-sm font-semibold mt-0.5">
-        {pass ? "Cumple" : "No cumple"} — {value}
-      </p>
+      </span>
+      <span className={`font-mono font-semibold ${pass ? "" : "text-wv-red"}`}>
+        {value}
+      </span>
     </div>
   );
 }
 
-function DetailToggle({ label, children }: { label?: string; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
+function DetailToggle({ label, children, defaultOpen = false }: { label?: string; children: React.ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="mt-2 pt-2 border-t border-wv-border/50">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+        className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer font-medium"
       >
         <svg className={`w-3 h-3 transition-transform ${open ? "rotate-90" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
         {label ?? "Ver cómo se calculó"}
@@ -718,6 +716,13 @@ export default function Home() {
   const [showConfig, setShowConfig] = useState(false);
   const [activeEdadTab, setActiveEdadTab] = useState(0);
 
+  // Calificación — formulario interactivo
+  const [calPensionado, setCalPensionado] = useState<"no" | "temporal" | "definitivo" | null>(null);
+  const [calNecesidad, setCalNecesidad] = useState<"si" | "no" | null>(null);
+  const [calSimulacion, setCalSimulacion] = useState<"no" | "si_timbrados" | "si_no_timbrados" | null>(null);
+  const [calDemandas, setCalDemandas] = useState<"no" | "conciliacion" | "avanzada" | null>(null);
+  const [calReintegroManual, setCalReintegroManual] = useState<number | null>(null);
+
   const handleTextExtracted = useCallback(async (text: string) => {
     setIsProcessing(true);
     setError(null);
@@ -748,6 +753,11 @@ export default function Home() {
     setActiveTab("calculadora");
     setEsposa(true);
     setHijos(0);
+    setCalPensionado(null);
+    setCalNecesidad(null);
+    setCalSimulacion(null);
+    setCalDemandas(null);
+    setCalReintegroManual(null);
   }, []);
 
   const isLey73 = result?.regimen === "ley73";
@@ -885,9 +895,36 @@ export default function Home() {
   }, [result, edadInfo?.fechaNacimiento, ultimaCotizacion, pensionResult, esposa, hijos]);
 
   const actMinCumplePension = escenarios ? escenarios.pensionActual.pensionNeta < pensionMinimaVigente : false;
-  // Pensión < mínima se muestra pero NO se usa como limitante (fórmula pendiente de corrección)
   const actMinAcredita = isLey73 && !asesoriaAhoraCumple && !asesoriaFuturoCumple && !recupAcredita
-    && actMinCumpleEdad && actMinCumpleSemanas && actMinCumpleSinCotizar;
+    && actMinCumpleEdad && actMinCumpleSemanas;
+
+  // Completar 500 Semanas — 5ta opción de financiamiento
+  const comp500CumpleEdad = edad >= 59;
+  const comp500CumpleSemanas = semanasTotales >= 440;
+  const comp500Acredita = isLey73 && !asesoriaAhoraCumple && !asesoriaFuturoCumple && !recupAcredita && !actMinAcredita
+    && comp500CumpleEdad && comp500CumpleSemanas;
+
+  // Cascada de calificación: si alguna descalifica, las siguientes no califican
+  const calDescalificado = calPensionado === "definitivo"
+    || calNecesidad === "no"
+    || calSimulacion === "si_no_timbrados"
+    || calDemandas === "avanzada";
+
+  // Reintegro efectivo para cálculos — se suma al AFORE solo para Ahora/Futuro
+  const montoReintegroEfectivo = calReintegroManual ?? (result?.retirosDesempleo?.totalDevolver ?? 0);
+  const saldoAforeConReintegro = saldoAfore + montoReintegroEfectivo;
+  const cumpleAforeConReintegro = saldoAforeConReintegro >= montoRequerido;
+
+  // Vigencia de derechos Mod 40 y pensión
+  const vigenciaMod40 = ultimaCotizacion
+    ? new Date(ultimaCotizacion.getTime() + (modalidad === "mod40" ? LIMITE_MOD40_DIAS : LIMITE_MOD10_DIAS) * 86400000)
+    : null;
+  const vigenciaMod40Activa = vigenciaMod40 ? vigenciaMod40.getTime() > Date.now() : false;
+
+  const vigenciaPension = ultimaCotizacion
+    ? new Date(ultimaCotizacion.getTime() + diasConservacion * 86400000)
+    : null;
+  const vigenciaPensionActiva = vigenciaPension ? vigenciaPension.getTime() > Date.now() : false;
 
   return (
     <main className="flex-1">
@@ -1237,6 +1274,181 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Calificación — formulario interactivo */}
+            {isLey73 && (
+              <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden px-4 sm:px-5 py-3 sm:py-4 space-y-3 no-print">
+                <h3 className="font-semibold text-sm sm:text-base">Calificación</h3>
+
+                {/* 1. ¿Está pensionado? */}
+                <div className="space-y-1.5">
+                  <p className="text-xs sm:text-sm font-medium">¿Está pensionado?</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button type="button" onClick={() => setCalPensionado("no")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${calPensionado === "no" ? "bg-wv-green/20 border-wv-green text-wv-green" : "border-wv-border text-muted-foreground hover:border-foreground"}`}>
+                      No
+                    </button>
+                    <button type="button" onClick={() => setCalPensionado("temporal")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${calPensionado === "temporal" ? "bg-wv-green/20 border-wv-green text-wv-green" : "border-wv-border text-muted-foreground hover:border-foreground"}`}>
+                      Sí — Temporal
+                    </button>
+                    <button type="button" onClick={() => setCalPensionado("definitivo")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${calPensionado === "definitivo" ? "bg-wv-red/20 border-wv-red text-wv-red" : "border-wv-border text-muted-foreground hover:border-foreground"}`}>
+                      Sí — Definitivo
+                    </button>
+                  </div>
+                  {calPensionado === "definitivo" && (
+                    <p className="text-[10px] text-wv-red">Pensionado definitivo — no califica para financiamiento</p>
+                  )}
+                </div>
+
+                {/* 2. Necesidad */}
+                {calPensionado !== "definitivo" && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs sm:text-sm font-medium">¿Necesita financiamiento?</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button type="button" onClick={() => setCalNecesidad("si")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${calNecesidad === "si" ? "bg-wv-green/20 border-wv-green text-wv-green" : "border-wv-border text-muted-foreground hover:border-foreground"}`}>
+                        Sí, necesita financiamiento
+                      </button>
+                      <button type="button" onClick={() => setCalNecesidad("no")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${calNecesidad === "no" ? "bg-wv-red/20 border-wv-red text-wv-red" : "border-wv-border text-muted-foreground hover:border-foreground"}`}>
+                        No, solo busca asesoría
+                      </button>
+                    </div>
+                    {calNecesidad === "no" && (
+                      <p className="text-[10px] text-wv-red">No necesita financiamiento — descalificado</p>
+                    )}
+                  </div>
+                )}
+
+                {/* 3. Simulación */}
+                {calPensionado !== "definitivo" && calNecesidad === "si" && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs sm:text-sm font-medium">¿Tiene simulación de pensión?</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button type="button" onClick={() => setCalSimulacion("no")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${calSimulacion === "no" ? "bg-wv-green/20 border-wv-green text-wv-green" : "border-wv-border text-muted-foreground hover:border-foreground"}`}>
+                        No
+                      </button>
+                      <button type="button" onClick={() => setCalSimulacion("si_timbrados")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${calSimulacion === "si_timbrados" ? "bg-wv-green/20 border-wv-green text-wv-green" : "border-wv-border text-muted-foreground hover:border-foreground"}`}>
+                        Sí — Están timbrados
+                      </button>
+                      <button type="button" onClick={() => setCalSimulacion("si_no_timbrados")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${calSimulacion === "si_no_timbrados" ? "bg-wv-red/20 border-wv-red text-wv-red" : "border-wv-border text-muted-foreground hover:border-foreground"}`}>
+                        Sí — No están timbrados
+                      </button>
+                    </div>
+                    {calSimulacion === "si_no_timbrados" && (
+                      <p className="text-[10px] text-wv-red">Simulación no timbrada — descalificado</p>
+                    )}
+                  </div>
+                )}
+
+                {/* 4. Demandas */}
+                {calPensionado !== "definitivo" && calNecesidad === "si" && calSimulacion !== "si_no_timbrados" && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs sm:text-sm font-medium">¿Tiene demandas?</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button type="button" onClick={() => setCalDemandas("no")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${calDemandas === "no" ? "bg-wv-green/20 border-wv-green text-wv-green" : "border-wv-border text-muted-foreground hover:border-foreground"}`}>
+                        No
+                      </button>
+                      <button type="button" onClick={() => setCalDemandas("conciliacion")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${calDemandas === "conciliacion" ? "bg-wv-green/20 border-wv-green text-wv-green" : "border-wv-border text-muted-foreground hover:border-foreground"}`}>
+                        Sí — En conciliación y arbitraje
+                      </button>
+                      <button type="button" onClick={() => setCalDemandas("avanzada")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${calDemandas === "avanzada" ? "bg-wv-red/20 border-wv-red text-wv-red" : "border-wv-border text-muted-foreground hover:border-foreground"}`}>
+                        Sí — Ya avanzó la demanda
+                      </button>
+                    </div>
+                    {calDemandas === "avanzada" && (
+                      <p className="text-[10px] text-wv-red">Demanda avanzada — descalificado</p>
+                    )}
+                  </div>
+                )}
+
+                {/* 5. Crédito INFONAVIT */}
+                {!calDescalificado && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs sm:text-sm font-medium">¿Tiene crédito INFONAVIT?</p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button type="button" onClick={() => { setTieneCredito(false); setMontoCredito(0); }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${!tieneCredito ? "bg-wv-green/20 border-wv-green text-wv-green" : "border-wv-border text-muted-foreground hover:border-foreground"}`}>
+                        No
+                      </button>
+                      <button type="button" onClick={() => setTieneCredito(true)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${tieneCredito ? "bg-wv-cyan/20 border-wv-cyan text-wv-cyan" : "border-wv-border text-muted-foreground hover:border-foreground"}`}>
+                        Sí
+                      </button>
+                      {tieneCredito && (
+                        <div className="flex items-center gap-2 ml-2">
+                          <span className="text-xs text-muted-foreground">Saldo:</span>
+                          <div className="relative">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={montoCredito ? formatInt(montoCredito) : ""}
+                              onChange={(e) => {
+                                const raw = e.target.value.replace(/[^0-9]/g, "");
+                                setMontoCredito(raw ? Math.max(0, Number(raw)) : 0);
+                              }}
+                              placeholder="0"
+                              className="w-28 rounded-lg border border-wv-border bg-background pl-6 pr-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-wv-cyan focus:border-transparent"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* 6. Reintegro de semanas */}
+                {!calDescalificado && result.header.semanasDescontadas > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs sm:text-sm font-medium">Reintegro de semanas descontadas</p>
+                    <p className="text-[10px] sm:text-[11px] text-muted-foreground">
+                      {result.header.semanasDescontadas} semanas descontadas — monto calculado: {formatMXN(result.retirosDesempleo?.totalDevolver ?? 0)}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Monto a reintegrar:</span>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={calReintegroManual !== null ? formatInt(calReintegroManual) : formatInt(result.retirosDesempleo?.totalDevolver ?? 0)}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9]/g, "");
+                            setCalReintegroManual(raw ? Math.max(0, Number(raw)) : 0);
+                          }}
+                          placeholder="0"
+                          className="w-32 rounded-lg border border-wv-border bg-background pl-6 pr-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-wv-cyan focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[9px] text-muted-foreground">
+                      El monto de reintegro se suma al AFORE requerido solo para Ahora y Futuro
+                    </p>
+                  </div>
+                )}
+                {!calDescalificado && result.header.semanasDescontadas === 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs sm:text-sm font-medium">Reintegro de semanas</p>
+                    <p className="text-[10px] text-muted-foreground">No tiene semanas descontadas — no aplica reintegro</p>
+                  </div>
+                )}
+
+                {calDescalificado && (
+                  <div className="rounded-lg p-3 bg-wv-red/10 border border-wv-red/20">
+                    <p className="text-xs font-medium text-wv-red">Descalificado — no califica para ningún financiamiento</p>
+                  </div>
+                )}
+              </section>
+            )}
+
             {/* Tab Navigation */}
             {isLey73 && (
               <div className="flex gap-1 bg-wv-surface rounded-xl border border-wv-border p-1 no-print">
@@ -1274,10 +1486,29 @@ export default function Home() {
               if (modalidad === "mod40" && !mod40Cumple) razones.push("No cumple Modalidad 40");
 
               const cumpleModalidad = modalidad === "mod10" ? mod10Cumple : modalidad === "mod40" ? mod40Cumple : true;
-              const pasaFiltros = isLey73 && cumpleSemanas && cumpleAfore && cumpleModalidad;
-              const acreditaAhora = pasaFiltros && asesoriaAhoraCumple;
-              const acreditaFuturo = pasaFiltros && asesoriaFuturoCumple;
-              const acreditaRecuperacion = isLey73 && !acreditaAhora && !acreditaFuturo && recupAcredita;
+              const pasaFiltrosBase = isLey73 && cumpleSemanas && cumpleModalidad && !calDescalificado;
+              const acreditaAhora = pasaFiltrosBase && cumpleAforeConReintegro && asesoriaAhoraCumple;
+              const acreditaFuturo = pasaFiltrosBase && cumpleAforeConReintegro && asesoriaFuturoCumple;
+              const acreditaRecuperacion = isLey73 && !calDescalificado && !acreditaAhora && !acreditaFuturo && recupAcredita;
+
+              if (calDescalificado) {
+                const motivo = calPensionado === "definitivo" ? "Pensionado definitivo"
+                  : calNecesidad === "no" ? "No necesita financiamiento"
+                  : calSimulacion === "si_no_timbrados" ? "Simulación no timbrada"
+                  : calDemandas === "avanzada" ? "Demanda avanzada" : "Descalificado";
+                return (
+                  <div className="rounded-xl sm:rounded-[16px] border-2 border-wv-red/30 bg-gradient-to-r from-wv-red/10 to-wv-surface px-4 sm:px-6 py-3 sm:py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="shrink-0 h-10 w-10 rounded-full bg-wv-red/10 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-wv-red" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm sm:text-lg text-wv-red">No califica — {motivo}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
 
               if (!isLey73) {
                 return (
@@ -1350,7 +1581,7 @@ export default function Home() {
                 );
               }
 
-              if (actMinAcredita) {
+              if (actMinAcredita && !calDescalificado) {
                 return (
                   <div className="rounded-xl sm:rounded-[16px] border-2 border-purple-500/40 bg-gradient-to-r from-purple-500/10 to-wv-surface px-4 sm:px-6 py-3 sm:py-4">
                     <div className="flex items-center gap-3">
@@ -1361,6 +1592,24 @@ export default function Home() {
                         <p className="font-bold text-sm sm:text-lg text-purple-500">Acredita Actualización de Pensión Mínima</p>
                         <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
                           Cotizar 3 meses en Mod 10 para actualizar pensión mínima al año vigente
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (comp500Acredita && !calDescalificado) {
+                return (
+                  <div className="rounded-xl sm:rounded-[16px] border-2 border-teal-500/40 bg-gradient-to-r from-teal-500/10 to-wv-surface px-4 sm:px-6 py-3 sm:py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="shrink-0 h-10 w-10 rounded-full bg-teal-500/10 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-teal-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm sm:text-lg text-teal-500">Califica para Completar 500 Semanas</p>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
+                          {formatInt(semanasTotales)} semanas cotizadas, {edad} años
                         </p>
                       </div>
                     </div>
@@ -1383,45 +1632,28 @@ export default function Home() {
               );
             })()}
 
-            {/* Validations */}
-            <section>
-              <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
-                <div className="h-4 w-1 rounded-full bg-wv-cyan" />
-                <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">
-                  Validaciones
-                </h2>
-              </div>
-
+            {/* Validations — collapsible */}
+            <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
+              <DetailToggle label="Financiamiento Modalidad 40 Retroactivo" defaultOpen={false}>
               <div className="space-y-2 sm:space-y-2.5">
                 {/* Ley 73 */}
-                <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-                  <div className={`border-l-4 ${isLey73 ? "border-l-wv-green" : "border-l-wv-red"} px-3.5 sm:px-5 py-2.5 sm:py-3`}>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="font-medium text-xs sm:text-sm">Régimen Ley 73</p>
-                        <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 leading-tight">
-                          {isLey73
-                            ? <>Primera alta antes del 1 julio 1997{primeraCotizacion && <> — {primeraCotizacion.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}</>}</>
-                            : "Primera alta después del 1 de julio de 1997"}
-                        </p>
-                      </div>
-                      <StatusBadge pass={isLey73} />
-                    </div>
-                  </div>
+                <div className="flex items-center justify-between gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5">
+                  <p className={`font-medium text-xs sm:text-sm ${isLey73 ? "" : "text-wv-red"}`}>Régimen Ley 73</p>
+                  <span className={`text-[10px] sm:text-xs font-mono ${isLey73 ? "text-muted-foreground" : "text-wv-red"}`}>
+                    {isLey73
+                      ? <>Primera alta antes del 1 julio 1997{primeraCotizacion && <> — {primeraCotizacion.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}</>}</>
+                      : "Primera alta después del 1 de julio de 1997"}
+                  </span>
                 </div>
 
                 {/* Semanas Cotizadas — age-based ranges */}
-                <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-                  <div className={`border-l-4 ${cumpleSemanas ? "border-l-wv-green" : "border-l-wv-red"} px-3.5 sm:px-4 py-2.5 sm:py-3 space-y-2 sm:space-y-2.5`}>
+                <div className="px-3.5 sm:px-4 py-2 sm:py-2.5 space-y-2">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="font-medium text-xs sm:text-sm">Semanas Cotizadas</p>
-                        <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 leading-tight">
-                          {formatInt(semanasTotales)} semanas — Mínimo requerido: {formatInt(semanasMinimas)}
-                          {edadExacta && <> (edad: {edadExacta.anos}a {edadExacta.meses}m {edadExacta.dias}d)</>}
-                        </p>
-                      </div>
-                      <StatusBadge pass={cumpleSemanas} />
+                      <p className={`font-medium text-xs sm:text-sm ${cumpleSemanas ? "" : "text-wv-red"}`}>Semanas Cotizadas</p>
+                      <span className={`text-[10px] sm:text-xs font-mono ${cumpleSemanas ? "text-muted-foreground" : "text-wv-red"}`}>
+                        Mínimo requerido: {formatInt(semanasMinimas)}
+                        {edadExacta && <> (edad: {edadExacta.anos}a {edadExacta.meses}m {edadExacta.dias}d)</>}
+                      </span>
                     </div>
 
                     <DetailToggle label="Ver tabla de semanas por edad y desglose">
@@ -1467,26 +1699,22 @@ export default function Home() {
                         </div>
                       </div>
                     </DetailToggle>
-                  </div>
                 </div>
 
                 {/* Saldo AFORE */}
-                <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-                  <div
-                    className={`border-l-4 ${cumpleAfore ? "border-l-wv-green" : "border-l-wv-red"} px-3.5 sm:px-4 py-2.5 sm:py-3 space-y-2 sm:space-y-2.5`}
-                  >
+                <div className="px-3.5 sm:px-4 py-2 sm:py-2.5 space-y-2">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="font-medium text-xs sm:text-sm">
-                          Saldo AFORE
-                        </p>
-                        <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
-                          Costo: {formatMXN(costoAnual)}/año ({formatMXN(Math.round(costoDiario))}/día) — {formatInt(semanasTotales)} semanas
-                        </p>
-                      </div>
-                      <StatusBadge pass={cumpleAfore} />
+                      <p className={`font-medium text-xs sm:text-sm ${cumpleAfore ? "" : "text-wv-red"}`}>Saldo AFORE</p>
+                      <span className="text-[10px] sm:text-xs font-mono text-muted-foreground">
+                        Requerimiento: {formatMXN(costoAnual)}/año ({formatMXN(Math.round(costoDiario))}/día) — {formatInt(semanasTotales)} sem
+                      </span>
                     </div>
-
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] sm:text-xs font-mono">
+                      <span className="text-muted-foreground">Sin trabajar: <strong>{sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : "0d"}</strong></span>
+                      <span className="text-muted-foreground">Requerido: <strong>{formatMXN(montoRequerido)}</strong></span>
+                      <span className="text-muted-foreground">Saldo actual: <strong>{formatMXN(saldoAfore)}</strong></span>
+                      {!cumpleAfore && <span className="text-wv-red">Faltante: <strong>{formatMXN(faltante)}</strong></span>}
+                    </div>
                     <DetailToggle label="Ver tabla de costos y cálculo del monto requerido">
                       <p className="text-muted-foreground/70 mb-1 font-sans">Rango de edad: {rangoEdadLabel(rangosEdad, semanasRangoIndex)}</p>
                       <div className="rounded-lg border border-wv-border overflow-hidden font-sans">
@@ -1532,78 +1760,25 @@ export default function Home() {
                         <StepRow label={cumpleAfore ? "Excedente" : "Faltante"} value={formatMXN(Math.abs(saldoAfore - montoRequerido))} highlight />
                       </div>
                     </DetailToggle>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
-                      <div className="bg-muted/60 rounded-lg p-2">
-                        <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-                          Sin trabajar
-                        </p>
-                        <p className="text-xs sm:text-sm font-semibold mt-0.5">
-                          {sinTrabajar && sinTrabajar.dias > 0 ? (
-                            <>
-                              {sinTrabajar.anos > 0 && `${sinTrabajar.anos}a `}
-                              {sinTrabajar.meses > 0 &&
-                                `${sinTrabajar.meses}m `}
-                              {sinTrabajar.diasRestantes > 0 &&
-                                `${sinTrabajar.diasRestantes}d`}
-                              <span className="text-muted-foreground font-normal text-[10px] sm:text-xs">
-                                {" "}
-                                ({formatInt(sinTrabajar.dias)}d)
-                              </span>
-                            </>
-                          ) : (
-                            "Trabajando"
-                          )}
-                        </p>
-                      </div>
-                      <div className="bg-muted/60 rounded-lg p-2">
-                        <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-                          Requerido
-                        </p>
-                        <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">
-                          {formatMXN(montoRequerido)}
-                        </p>
-                      </div>
-                      <div className="bg-muted/60 rounded-lg p-2">
-                        <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-                          Saldo actual
-                        </p>
-                        <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">
-                          {formatMXN(saldoAfore)}
-                        </p>
-                      </div>
-                      {!cumpleAfore && (
-                        <div className="bg-wv-red/10 rounded-lg p-2">
-                          <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-                            Faltante
-                          </p>
-                          <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5 text-wv-red">
-                            {formatMXN(faltante)}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
                 </div>
 
                 {/* Modalidad (filtro) */}
                 {(modalidad === "mod10" || modalidad === "mod40") && (
-                  <div className="grid grid-cols-1">
+                  <div>
                     {modalidad === "mod10" && (
-                      <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-                        <div
-                          className={`border-l-4 ${mod10Cumple ? "border-l-wv-green" : "border-l-wv-red"} px-3.5 sm:px-4 py-2.5 sm:py-3 space-y-2`}
-                        >
+                      <div className="px-3.5 sm:px-4 py-2 sm:py-2.5 space-y-2">
                           <div className="flex items-center justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="font-medium text-xs sm:text-sm">
-                                Derecho para hacer Modalidad 40
-                              </p>
-                              <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
-                                RP: {ultimoRegistro?.registroPatronal}
-                              </p>
-                            </div>
-                            <StatusBadge pass={mod10Cumple} />
+                            <p className={`font-medium text-xs sm:text-sm ${mod10Cumple ? "" : "text-wv-red"}`}>
+                              Derecho para hacer Modalidad 40
+                            </p>
+                            <span className="text-[10px] sm:text-xs font-mono text-muted-foreground flex items-center gap-2">
+                              RP: {ultimoRegistro?.registroPatronal.slice(-2)}
+                              {vigenciaMod40 && (
+                                <span className={vigenciaMod40Activa ? "text-wv-green" : "text-wv-red"}>
+                                  Vigencia: {vigenciaMod40.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
+                                </span>
+                              )}
+                            </span>
                           </div>
                           <div className="space-y-1.5">
                             <SubCheck
@@ -1675,32 +1850,24 @@ export default function Home() {
                               </div>
                             </DetailToggle>
                           )}
-                        </div>
                       </div>
                     )}
 
                     {modalidad === "mod40" && (
-                      <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-                        <div
-                          className={`border-l-4 ${mod40Cumple ? "border-l-wv-green" : "border-l-wv-red"} px-3.5 sm:px-4 py-2.5 sm:py-3 space-y-2`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="font-medium text-xs sm:text-sm">
-                                Modalidad 40
-                              </p>
-                              <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
-                                RP: {ultimoRegistro?.registroPatronal}
-                              </p>
-                            </div>
-                            <StatusBadge pass={mod40Cumple} />
-                          </div>
-                          <SubCheck
-                            pass={mod40Cumple}
-                            label={`Máx. ${formatDiasCompleto(LIMITE_MOD40_DIAS)} sin cotizar`}
-                            value={`${formatDiasCompleto(diasSinCotizar)} (${diasSinCotizar} días)`}
-                          />
+                      <div className="px-3.5 sm:px-4 py-2 sm:py-2.5 space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className={`font-medium text-xs sm:text-sm ${mod40Cumple ? "" : "text-wv-red"}`}>
+                            Modalidad 40
+                          </p>
+                          <span className="text-[10px] sm:text-xs font-mono text-muted-foreground">
+                            RP: {ultimoRegistro?.registroPatronal.slice(-2)}
+                          </span>
                         </div>
+                        <SubCheck
+                          pass={mod40Cumple}
+                          label={`Máx. ${formatDiasCompleto(LIMITE_MOD40_DIAS)} sin cotizar`}
+                          value={`${formatDiasCompleto(diasSinCotizar)} (${diasSinCotizar} días)`}
+                        />
                       </div>
                     )}
                   </div>
@@ -1708,154 +1875,174 @@ export default function Home() {
 
                 {/* Financiamiento — decisión clave para el asesor */}
                 {edadInfo && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-2.5">
-                    <div
-                      className={`rounded-xl sm:rounded-[16px] overflow-hidden border-2 ${asesoriaAhoraCumple ? "border-wv-green/40 bg-gradient-to-br from-wv-surface to-wv-green/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
-                    >
-                      <div className="px-4 sm:px-5 py-3 sm:py-4 space-y-2.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="font-semibold text-sm sm:text-base">
-                              Financiamiento Ahora
-                            </p>
-                            <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
-                              Pensión inmediata
-                            </p>
+                  <div className="space-y-2 sm:space-y-2.5">
+                    {/* Fila 1: Ahora + Futuro */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 p-2 sm:p-2.5 rounded-xl border border-wv-border/50 bg-wv-surface/30">
+                      <div
+                        className={`rounded-xl sm:rounded-[16px] overflow-hidden border-2 ${asesoriaAhoraCumple ? "border-wv-green/40 bg-gradient-to-br from-wv-surface to-wv-green/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
+                      >
+                        <div className="px-4 sm:px-5 py-3 sm:py-4 space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="font-semibold text-sm sm:text-base">
+                                Ahora
+                              </p>
+                            </div>
+                            <StatusBadge
+                              pass={asesoriaAhoraCumple}
+                              labelPass="Acredita"
+                              labelFail="No acredita"
+                            />
                           </div>
-                          <StatusBadge
-                            pass={asesoriaAhoraCumple}
-                            labelPass="Acredita"
-                            labelFail="No acredita"
-                          />
+                          <div className="space-y-1.5">
+                            <SubCheck
+                              pass={asesoriaAhoraCumpleEdad}
+                              label="Edad min. 60"
+                              value={`${edad} años`}
+                            />
+                            <SubCheck
+                              pass={asesoriaAhoraCumpleMeses}
+                              label="> 12 meses sin cotizar"
+                              value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : `${mesesSinCotizar} meses`}
+                            />
+                          </div>
                         </div>
-                        <div className="space-y-1.5">
-                          <SubCheck
-                            pass={asesoriaAhoraCumpleEdad}
-                            label="Edad min. 60"
-                            value={`${edad} años`}
-                          />
-                          <SubCheck
-                            pass={asesoriaAhoraCumpleMeses}
-                            label="> 12 meses sin cotizar"
-                            value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : `${mesesSinCotizar} meses`}
-                          />
+                      </div>
+
+                      <div
+                        className={`rounded-xl sm:rounded-[16px] overflow-hidden border-2 ${asesoriaFuturoCumple ? "border-wv-green/40 bg-gradient-to-br from-wv-surface to-wv-green/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
+                      >
+                        <div className="px-4 sm:px-5 py-3 sm:py-4 space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="font-semibold text-sm sm:text-base">
+                                Futuro
+                              </p>
+                            </div>
+                            <StatusBadge
+                              pass={asesoriaFuturoCumple}
+                              labelPass="Acredita"
+                              labelFail="No acredita"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <SubCheck
+                              pass={asesoriaFuturoCumpleEdad}
+                              label="Edad min. 59"
+                              value={`${edad} años`}
+                            />
+                            <SubCheck
+                              pass={asesoriaFuturoCumpleMeses}
+                              label="> 5 meses sin cotizar"
+                              value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : `${mesesSinCotizar} meses`}
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
 
-                    <div
-                      className={`rounded-xl sm:rounded-[16px] overflow-hidden border-2 ${asesoriaFuturoCumple ? "border-wv-green/40 bg-gradient-to-br from-wv-surface to-wv-green/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
-                    >
-                      <div className="px-4 sm:px-5 py-3 sm:py-4 space-y-2.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="font-semibold text-sm sm:text-base">
-                              Financiamiento Futuro
-                            </p>
-                            <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
-                              Planeación a pensión
-                            </p>
+                    {/* Fila 2: Recuperar Derechos + Act. Pensión Mínima + Completar 500 */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5 p-2 sm:p-2.5 rounded-xl border border-wv-border/50 bg-wv-surface/30">
+                      <div
+                        className={`rounded-xl sm:rounded-[16px] overflow-hidden border-2 ${recupAcredita ? "border-amber-500/40 bg-gradient-to-br from-wv-surface to-amber-500/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
+                      >
+                        <div className="px-4 sm:px-5 py-3 sm:py-4 space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="font-semibold text-sm sm:text-base">
+                                Recuperar Derechos
+                              </p>
+                            </div>
+                            <StatusBadge
+                              pass={recupAcredita}
+                              labelPass="Acredita"
+                              labelFail="No acredita"
+                            />
                           </div>
-                          <StatusBadge
-                            pass={asesoriaFuturoCumple}
-                            labelPass="Acredita"
-                            labelFail="No acredita"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <SubCheck
-                            pass={asesoriaFuturoCumpleEdad}
-                            label="Edad min. 59"
-                            value={`${edad} años`}
-                          />
-                          <SubCheck
-                            pass={asesoriaFuturoCumpleMeses}
-                            label="> 5 meses sin cotizar"
-                            value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : `${mesesSinCotizar} meses`}
-                          />
+                          <div className="space-y-1.5">
+                            <SubCheck
+                              pass={recupCumpleEdad}
+                              label="Edad min. 59"
+                              value={`${edad} años`}
+                            />
+                            <SubCheck
+                              pass={recupCumpleSemanas}
+                              label="Min. 430 semanas"
+                              value={`${formatInt(semanasTotales)} semanas`}
+                            />
+                            <SubCheck
+                              pass={recupCumpleAfore}
+                              label="AFORE min. $40,000"
+                              value={formatMXN(saldoAfore)}
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div
-                      className={`rounded-xl sm:rounded-[16px] overflow-hidden border-2 ${recupAcredita ? "border-amber-500/40 bg-gradient-to-br from-wv-surface to-amber-500/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
-                    >
-                      <div className="px-4 sm:px-5 py-3 sm:py-4 space-y-2.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="font-semibold text-sm sm:text-base">
-                              Recuperación de Derechos
-                            </p>
-                            <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
-                              Reingreso vía Mod 10
-                            </p>
+                      <div
+                        className={`rounded-xl sm:rounded-[16px] overflow-hidden border-2 ${actMinAcredita ? "border-purple-500/40 bg-gradient-to-br from-wv-surface to-purple-500/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
+                      >
+                        <div className="px-4 sm:px-5 py-3 sm:py-4 space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="font-semibold text-sm sm:text-base">
+                                Actualización Pensión Mínima
+                              </p>
+                            </div>
+                            <StatusBadge
+                              pass={actMinAcredita}
+                              labelPass="Acredita"
+                              labelFail="No acredita"
+                            />
                           </div>
-                          <StatusBadge
-                            pass={recupAcredita}
-                            labelPass="Acredita"
-                            labelFail="No acredita"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <SubCheck
-                            pass={recupCumpleEdad}
-                            label="Edad min. 59"
-                            value={`${edad} años`}
-                          />
-                          <SubCheck
-                            pass={recupCumpleSemanas}
-                            label="Min. 430 semanas"
-                            value={`${formatInt(semanasTotales)} semanas`}
-                          />
-                          <SubCheck
-                            pass={recupCumpleAfore}
-                            label="AFORE min. $40,000"
-                            value={formatMXN(saldoAfore)}
-                          />
+                          <div className="space-y-1.5">
+                            <SubCheck
+                              pass={actMinCumpleEdad}
+                              label="Edad min. 59a 8m"
+                              value={edadExacta ? `${edadExacta.anos}a ${edadExacta.meses}m` : `${edad} años`}
+                            />
+                            <SubCheck
+                              pass={actMinCumpleSemanas}
+                              label="Min. 470 semanas"
+                              value={`${formatInt(semanasTotales)} semanas`}
+                            />
+                            <SubCheck
+                              pass={actMinCumplePension}
+                              label={`Pensión < mínima (${formatMXN(pensionMinimaVigente)})`}
+                              value={escenarios ? formatMXN(escenarios.pensionActual.pensionNeta) : "$0"}
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div
-                      className={`rounded-xl sm:rounded-[16px] overflow-hidden border-2 ${actMinAcredita ? "border-purple-500/40 bg-gradient-to-br from-wv-surface to-purple-500/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
-                    >
-                      <div className="px-4 sm:px-5 py-3 sm:py-4 space-y-2.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="font-semibold text-sm sm:text-base">
-                              Act. Pensión Mínima
-                            </p>
-                            <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
-                              Actualizar al año vigente
-                            </p>
+                      <div
+                        className={`rounded-xl sm:rounded-[16px] overflow-hidden border-2 ${comp500Acredita ? "border-teal-500/40 bg-gradient-to-br from-wv-surface to-teal-500/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
+                      >
+                        <div className="px-4 sm:px-5 py-3 sm:py-4 space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="font-semibold text-sm sm:text-base">
+                                Completar 500 Semanas
+                              </p>
+                            </div>
+                            <StatusBadge
+                              pass={comp500Acredita}
+                              labelPass="Sí califica"
+                              labelFail="No califica"
+                            />
                           </div>
-                          <StatusBadge
-                            pass={actMinAcredita}
-                            labelPass="Acredita"
-                            labelFail="No acredita"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <SubCheck
-                            pass={actMinCumpleEdad}
-                            label="Edad min. 59a 8m"
-                            value={edadExacta ? `${edadExacta.anos}a ${edadExacta.meses}m` : `${edad} años`}
-                          />
-                          <SubCheck
-                            pass={actMinCumpleSemanas}
-                            label="Min. 470 semanas"
-                            value={`${formatInt(semanasTotales)} semanas`}
-                          />
-                          <SubCheck
-                            pass={actMinCumpleSinCotizar}
-                            label="≥ 2 años sin cotizar"
-                            value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m` : "0"}
-                          />
-                          <SubCheck
-                            pass={actMinCumplePension}
-                            label={`Pensión < mínima (${formatMXN(pensionMinimaVigente)})`}
-                            value={escenarios ? formatMXN(escenarios.pensionActual.pensionNeta) : "$0"}
-                          />
+                          <div className="space-y-1.5">
+                            <SubCheck
+                              pass={comp500CumpleEdad}
+                              label="Edad min. 59"
+                              value={`${edad} años`}
+                            />
+                            <SubCheck
+                              pass={comp500CumpleSemanas}
+                              label="Min. 440 semanas"
+                              value={`${formatInt(semanasTotales)} semanas`}
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1864,70 +2051,55 @@ export default function Home() {
 
                 {/* Conservación de Derechos — Art. 150/151 */}
                 {edadInfo && isLey73 && (
-                  <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-                    <div className={`border-l-4 ${perdioDerechos ? "border-l-amber-500" : "border-l-wv-green"} px-3.5 sm:px-4 py-2.5 sm:py-3 space-y-2 sm:space-y-2.5`}>
+                  <div className="px-3.5 sm:px-4 py-2 sm:py-2.5 space-y-2">
                       <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="font-medium text-xs sm:text-sm">Derecho para poderte pensionar</p>
-                          <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 leading-tight">
-                            {perdioDerechos && !perdioDerechosSimple
-                              ? "Perdió derechos en historial laboral y no los recuperó"
-                              : `Art. 150 — 25% de ${formatInt(semanasTotales)} sem = ${formatInt(semanasConservacion)} sem (${formatDiasCompleto(diasConservacion)})`}
-                          </p>
-                        </div>
-                        <StatusBadge
-                          pass={!perdioDerechos}
-                          labelPass="Vigente"
-                          labelFail="Perdió derechos"
-                        />
+                        <p className={`font-medium text-xs sm:text-sm ${perdioDerechos ? "text-amber-500" : ""}`}>Derecho para poderte pensionar</p>
+                        <span className={`text-[10px] sm:text-xs font-mono ${perdioDerechos ? "text-amber-500" : "text-muted-foreground"}`}>
+                          {perdioDerechos ? "Perdió derechos" : "Vigente"}
+                          {vigenciaPension && (
+                            <span className={`ml-2 ${vigenciaPensionActiva ? "text-wv-green" : "text-wv-red"}`}>
+                              Vigencia: {vigenciaPension.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
+                            </span>
+                          )}
+                        </span>
                       </div>
-
-                      <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
-                        <div className="bg-muted/60 rounded-lg p-2">
-                          <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Conservación</p>
-                          <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{formatDiasCompleto(diasConservacion)}</p>
-                          <p className="text-[9px] text-muted-foreground">{formatInt(semanasConservacion)} sem</p>
-                        </div>
-                        <div className="bg-muted/60 rounded-lg p-2">
-                          <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Sin cotizar</p>
-                          <p className={`text-xs sm:text-sm font-semibold font-mono mt-0.5 ${perdioDerechos ? "text-amber-500" : ""}`}>
-                            {sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : "0d"}
-                          </p>
-                          <p className="text-[9px] text-muted-foreground">{formatInt(diasSinCotizar)} días</p>
-                        </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] sm:text-xs font-mono">
+                        <span className="text-muted-foreground">Conservación: <strong>{formatDiasCompleto(diasConservacion)}</strong> ({formatInt(semanasConservacion)} sem)</span>
+                        <span className={perdioDerechos ? "text-amber-500" : "text-muted-foreground"}>Sin cotizar: <strong>{sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : "0d"}</strong> ({formatInt(diasSinCotizar)}d)</span>
                       </div>
 
                       {perdioDerechos && (
-                        <div className="rounded-lg p-2.5 border border-amber-500/20 bg-amber-500/5 space-y-2">
-                          <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Art. 151 — Semanas nuevas para recuperar</p>
-                          <p className="text-xs sm:text-sm font-semibold mt-0.5 text-amber-500">
-                            {semanasNuevasRequeridas === 0
-                              ? "Cotizar 1 mes en Mod 10 para recuperar derechos"
-                              : `${semanasNuevasRequeridas} semanas nuevas ininterrumpidas requeridas`}
-                          </p>
-                          <p className="text-[9px] text-muted-foreground mt-0.5">
-                            {anosDesdePerdida <= 3
-                              ? "Menos de 3 años desde pérdida — cotizar 1 mes en Mod 10 para recuperar"
-                              : anosDesdePerdida <= 5
-                                ? "Entre 3 y 5 años — 26 semanas nuevas ininterrumpidas (≈6 meses Mod 10)"
-                                : "Más de 5 años — 52 semanas nuevas ininterrumpidas (≈12 meses Mod 10)"}
-                          </p>
-                          {rightsHistory && rightsHistory.events.length > 0 && (
-                            <div className="mt-2 space-y-1">
-                              <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Rastreabilidad histórica</p>
-                              {rightsHistory.events.map((evt, idx) => (
-                                <div key={idx} className={`flex items-start gap-2 text-[10px] sm:text-xs ${evt.type === "recovered" ? "text-wv-green" : "text-amber-500"}`}>
-                                  <span className="shrink-0 mt-0.5">{evt.type === "recovered" ? "✓" : evt.type === "not_recovered" ? "✗" : "⚠"}</span>
-                                  <span>
-                                    {evt.type === "lost" && `Perdió derechos — gap de ${formatDiasCompleto(evt.gapDays)} (conservación: ${formatDiasCompleto(evt.conservationDays)}) entre ${evt.gapStart.toLocaleDateString("es-MX", { timeZone: "UTC" })} y ${evt.gapEnd.toLocaleDateString("es-MX", { timeZone: "UTC" })}`}
-                                    {evt.type === "not_recovered" && `No recuperó — cotizó ${evt.weeksWorked} sem (necesitaba ${evt.weeksNeeded}) entre ${evt.gapStart.toLocaleDateString("es-MX", { timeZone: "UTC" })} y ${evt.gapEnd.toLocaleDateString("es-MX", { timeZone: "UTC" })}`}
-                                    {evt.type === "recovered" && `Recuperó derechos — cotizó ${evt.weeksWorked} sem (necesitaba ${evt.weeksNeeded})`}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                        <DetailToggle label={`Art. 151 — ${semanasNuevasRequeridas === 0 ? "Cotizar 1 mes en Mod 10" : `${semanasNuevasRequeridas} semanas nuevas requeridas`}`}>
+                          <div className="rounded-lg p-2.5 border border-amber-500/20 bg-amber-500/5 space-y-2 font-sans">
+                            <p className="text-xs sm:text-sm font-semibold text-amber-500">
+                              {semanasNuevasRequeridas === 0
+                                ? "Cotizar 1 mes en Mod 10 para recuperar derechos"
+                                : `${semanasNuevasRequeridas} semanas nuevas ininterrumpidas requeridas`}
+                            </p>
+                            <p className="text-[9px] text-muted-foreground">
+                              {anosDesdePerdida <= 3
+                                ? "Menos de 3 años desde pérdida — cotizar 1 mes en Mod 10 para recuperar"
+                                : anosDesdePerdida <= 5
+                                  ? "Entre 3 y 5 años — 26 semanas nuevas ininterrumpidas (≈6 meses Mod 10)"
+                                  : "Más de 5 años — 52 semanas nuevas ininterrumpidas (≈12 meses Mod 10)"}
+                            </p>
+                            {rightsHistory && rightsHistory.events.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Rastreabilidad histórica</p>
+                                {rightsHistory.events.map((evt, idx) => (
+                                  <div key={idx} className={`flex items-start gap-2 text-[10px] sm:text-xs ${evt.type === "recovered" ? "text-wv-green" : "text-amber-500"}`}>
+                                    <span className="shrink-0 mt-0.5">{evt.type === "recovered" ? "✓" : evt.type === "not_recovered" ? "✗" : "⚠"}</span>
+                                    <span>
+                                      {evt.type === "lost" && `Perdió derechos — gap de ${formatDiasCompleto(evt.gapDays)} (conservación: ${formatDiasCompleto(evt.conservationDays)}) entre ${evt.gapStart.toLocaleDateString("es-MX", { timeZone: "UTC" })} y ${evt.gapEnd.toLocaleDateString("es-MX", { timeZone: "UTC" })}`}
+                                      {evt.type === "not_recovered" && `No recuperó — cotizó ${evt.weeksWorked} sem (necesitaba ${evt.weeksNeeded}) entre ${evt.gapStart.toLocaleDateString("es-MX", { timeZone: "UTC" })} y ${evt.gapEnd.toLocaleDateString("es-MX", { timeZone: "UTC" })}`}
+                                      {evt.type === "recovered" && `Recuperó derechos — cotizó ${evt.weeksWorked} sem (necesitaba ${evt.weeksNeeded})`}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </DetailToggle>
                       )}
 
                       <DetailToggle label="Ver cálculo de conservación">
@@ -1945,10 +2117,10 @@ export default function Home() {
                           </>
                         )}
                       </DetailToggle>
-                    </div>
                   </div>
                 )}
               </div>
+              </DetailToggle>
             </section>
 
             {/* Retiros Parciales por Desempleo */}
@@ -1979,117 +2151,169 @@ export default function Home() {
 
             {isLey73 && (
               <>
-                {/* Crédito INFONAVIT */}
-                <section>
-                  <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
-                    <div className="h-4 w-1 rounded-full bg-wv-cyan" />
-                    <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">
-                      Crédito INFONAVIT
-                    </h2>
-                  </div>
-                  <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none px-4 sm:px-5 py-3 sm:py-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5">
-                      <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={tieneCredito}
-                          onClick={() => {
-                            setTieneCredito(!tieneCredito);
-                            if (tieneCredito) setMontoCredito(0);
-                          }}
-                          className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wv-cyan focus-visible:ring-offset-2 focus-visible:ring-offset-background ${tieneCredito ? "bg-wv-cyan" : "bg-muted"}`}
-                        >
-                          <span
-                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition-transform ${tieneCredito ? "translate-x-5" : "translate-x-0"}`}
-                          />
-                        </button>
-                        <span className="text-xs sm:text-sm font-medium">
-                          ¿Tiene crédito INFONAVIT?
-                        </span>
-                      </label>
-                      {tieneCredito && (
-                        <div className="flex items-center gap-2 flex-1 max-w-xs">
-                          <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">Saldo del crédito:</span>
-                          <div className="relative flex-1">
-                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              value={montoCredito ? formatInt(montoCredito) : ""}
-                              onChange={(e) => {
-                                const raw = e.target.value.replace(/[^0-9]/g, "");
-                                setMontoCredito(raw ? Math.max(0, Number(raw)) : 0);
-                              }}
-                              placeholder="0"
-                              className="w-full rounded-lg border border-wv-border bg-background pl-6 pr-3 py-1.5 text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-wv-cyan focus:border-transparent"
-                            />
-                          </div>
-                        </div>
-                      )}
+                <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
+                  <DetailToggle label="AFORE" defaultOpen={false}>
+                    <ResultsSummary
+                      saldoAforeRegresar={saldoAfore}
+                      saldoSAR={
+                        result.afore.totalSAR92 + result.afore.retiro.total
+                      }
+                      saldoRCV={result.afore.totalRCV}
+                      saldoVivienda={viviendaAjustada}
+                    />
+                    <div className="mt-3">
+                      <AforeBreakdown afore={result.afore} />
                     </div>
-                    {tieneCredito && descuentoCredito > 0 && (
-                      <p className="text-[10px] sm:text-[11px] text-wv-red mt-2.5">
-                        Se descuentan {formatMXN(descuentoCredito)} de vivienda ({formatMXN(viviendaBruta)} → {formatMXN(viviendaAjustada)})
-                      </p>
-                    )}
-                  </div>
+                  </DetailToggle>
                 </section>
 
-                <section>
-                  <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
-                    <div className="h-4 w-1 rounded-full bg-wv-cyan" />
-                    <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">
-                      Resumen Financiero
-                    </h2>
-                  </div>
-                  <ResultsSummary
-                    saldoAforeRegresar={saldoAfore}
-                    saldoSAR={
-                      result.afore.totalSAR92 + result.afore.retiro.total
-                    }
-                    saldoRCV={result.afore.totalRCV}
-                    saldoVivienda={viviendaAjustada}
-                    promedioSalarial={result.salaryAverage.promedio}
-                    totalSemanas={result.header.totalSemanasCotizadas}
-                    totalRecords={
-                      result.records.length || (saldoAfore > 0 ? -1 : 0)
-                    }
-                  />
-                </section>
-
-                <section>
-                  <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
-                    <div className="h-4 w-1 rounded-full bg-wv-cyan" />
-                    <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">
-                      Desglose de Cuentas
-                    </h2>
-                  </div>
-                  <AforeBreakdown afore={result.afore} />
-                </section>
-
-                <section>
-                  <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
-                    <div className="h-4 w-1 rounded-full bg-wv-cyan" />
-                    <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">
-                      Promedio Salarial
-                    </h2>
-                  </div>
-                  <SalaryAverageBreakdown
-                    promedio={result.salaryAverage.promedio}
-                    periods={result.salaryAverage.periods}
-                  />
+                <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
+                  <DetailToggle label="Promedio Salarial" defaultOpen={false}>
+                    <SalaryAverageBreakdown
+                      promedio={result.salaryAverage.promedio}
+                      periods={result.salaryAverage.periods}
+                    />
+                  </DetailToggle>
                 </section>
 
                 {result.records.length > 0 && (
-                  <section>
-                    <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
-                      <div className="h-4 w-1 rounded-full bg-wv-cyan" />
-                      <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">
-                        Historial Laboral
-                      </h2>
+                  <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
+                    <DetailToggle label="Historial Laboral" defaultOpen={false}>
+                      <EmploymentTimeline records={result.records} />
+                    </DetailToggle>
+                  </section>
+                )}
+
+                {/* Información del Lead */}
+                <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
+                  <DetailToggle label="Información del Lead" defaultOpen={false}>
+                    <div className="space-y-1.5 text-xs sm:text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Ley 73</span>
+                        <span className={isLey73 ? "text-wv-green font-medium" : "text-wv-red font-medium"}>{isLey73 ? "Sí" : "No"}</span>
+                      </div>
+                      {primeraCotizacion && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Inicio de cotización</span>
+                          <span className="font-mono">{primeraCotizacion.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Edad</span>
+                        <span className={`font-medium ${edad < 60 ? "text-wv-red" : ""}`}>
+                          {edadExacta ? `${edadExacta.anos}a ${edadExacta.meses}m ${edadExacta.dias}d` : `${edad} años`}
+                        </span>
+                      </div>
+                      {edadInfo?.fechaNacimiento && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Cumple 60 años</span>
+                          {(() => {
+                            const fn = new Date(edadInfo.fechaNacimiento);
+                            const cumple60 = new Date(Date.UTC(fn.getUTCFullYear() + 60, fn.getUTCMonth(), fn.getUTCDate()));
+                            const hoy = new Date();
+                            const esFuturo = cumple60 > hoy;
+                            return <span className={`font-mono ${esFuturo ? "text-wv-red" : ""}`}>{cumple60.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}</span>;
+                          })()}
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Semanas cotizadas</span>
+                        <span className="font-mono">{formatInt(result.header.totalSemanasCotizadas)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Semanas descontadas</span>
+                        <span className="font-mono text-wv-red">{formatInt(result.header.semanasDescontadas)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Semanas reintegradas</span>
+                        <span className="font-mono text-wv-green">{formatInt(result.header.semanasReintegradas)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Promedio salarial diario</span>
+                        <span className="font-mono">{formatMXN(result.salaryAverage.promedio)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Promedio salarial mensual</span>
+                        <span className="font-mono">{formatMXN(result.salaryAverage.promedio * 30)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Derecho Mod. 40</span>
+                        <span className={`font-medium ${vigenciaMod40Activa ? "text-wv-green" : "text-wv-red"}`}>
+                          {vigenciaMod40Activa ? "Vigente" : "No vigente"}
+                          {vigenciaMod40 && <span className="font-mono font-normal text-[10px] ml-1">({vigenciaMod40.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })})</span>}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Derecho a pensionarse</span>
+                        <span className={`font-medium ${vigenciaPensionActiva && !perdioDerechos ? "text-wv-green" : "text-wv-red"}`}>
+                          {perdioDerechos ? "Perdió derechos" : vigenciaPensionActiva ? "Vigente" : "Expirado"}
+                          {vigenciaPension && <span className="font-mono font-normal text-[10px] ml-1">({vigenciaPension.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })})</span>}
+                        </span>
+                      </div>
+                      {escenarios && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">A recibir al pensionarse</span>
+                          <span className="font-mono font-medium">{formatMXN(escenarios.pensionActual.pensionNeta)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">AFORE total</span>
+                        <span className="font-mono">{formatMXN(saldoAfore)}</span>
+                      </div>
                     </div>
-                    <EmploymentTimeline records={result.records} />
+                  </DetailToggle>
+                </section>
+
+                {/* Mod. 40 Retroactivo — condicional */}
+                {escenarios && (
+                  <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
+                    <DetailToggle label="Mod. 40 Retroactivo" defaultOpen={!calDescalificado && (asesoriaAhoraCumple || asesoriaFuturoCumple)}>
+                      <div className="space-y-1.5 text-xs sm:text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Semanas cotizadas</span>
+                          <span className="font-mono">{formatInt(result.header.totalSemanasCotizadas)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Semanas descontadas</span>
+                          <span className="font-mono text-wv-red">{formatInt(result.header.semanasDescontadas)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Semanas reintegradas</span>
+                          <span className="font-mono text-wv-green">{formatInt(result.header.semanasReintegradas)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Promedio salarial diario</span>
+                          <span className="font-mono">{formatMXN(result.salaryAverage.promedio)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Promedio salarial mensual</span>
+                          <span className="font-mono">{formatMXN(result.salaryAverage.promedio * 30)}</span>
+                        </div>
+                        <div className="border-t border-wv-border/30 my-1" />
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Pensión actual</span>
+                          <span className="font-mono font-semibold">{formatMXN(escenarios.pensionActual.pensionNeta)}</span>
+                        </div>
+                        {mesesRetroactivo !== null && mesesRetroactivo > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Tiempo retroactivo</span>
+                            <span className="font-mono">{mesesRetroactivo} meses</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Pensión pronta (Mod. 40)</span>
+                          <span className="font-mono font-semibold text-wv-green">{formatMXN(escenarios.pensionPronta.pensionNeta)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Incremento</span>
+                          <span className="font-mono text-wv-green">+{formatMXN(escenarios.pensionPronta.pensionNeta - escenarios.pensionActual.pensionNeta)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Pensión 6 meses (Mod. 40)</span>
+                          <span className="font-mono font-semibold text-wv-green">{formatMXN(escenarios.pension6Meses.pensionNeta)}</span>
+                        </div>
+                      </div>
+                    </DetailToggle>
                   </section>
                 )}
 
