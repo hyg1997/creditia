@@ -1945,7 +1945,7 @@ export default function Home() {
                     </div>
 
                     {/* Fila 2: Recuperar Derechos + Act. Pensión Mínima + Completar 500 */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5 p-2 sm:p-2.5 rounded-xl border border-wv-border/50 bg-wv-surface/30">
+                    <div className="grid grid-cols-1 gap-2 sm:gap-2.5 p-2 sm:p-2.5 rounded-xl border border-wv-border/50 bg-wv-surface/30">
                       <div
                         className={`rounded-lg overflow-hidden border ${recupAcredita ? "border-wv-green/40 bg-gradient-to-br from-wv-surface to-wv-green/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
                       >
