@@ -366,7 +366,7 @@ export function calcEscenarios(input: ScenarioInput): ScenarioOutput {
     salarioPromedio,
     totalSemanas,
     edadRetiro: edadPension,
-    retirementDate: mesPensionPronta,
+    retirementDate: ultimaCotizacion,
     esposa,
     hijos,
   });

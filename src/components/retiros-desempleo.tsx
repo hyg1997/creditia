@@ -3,6 +3,27 @@
 import { useState, useMemo, useCallback } from "react";
 import { formatMXN, formatInt } from "@/lib/formatters";
 
+function ReferenceToggle() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border-t border-wv-border/50 pt-3">
+      <button onClick={() => setOpen(!open)} className="flex items-center gap-1.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors">
+        <svg className={`w-3 h-3 transition-transform ${open ? "rotate-90" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+        Referencia — Art. 191 y 198 LSS
+      </button>
+      {open && (
+        <div className="text-[10px] sm:text-[11px] text-muted-foreground space-y-1 mt-2">
+          <p><span className="font-medium text-foreground/70">Elegibilidad:</span> 46+ días sin empleo, mín. 5 años entre retiros</p>
+          <p><span className="font-medium text-foreground/70">Mod. A:</span> 30 días × último SBC (tope: 10× UMA mensual)</p>
+          <p><span className="font-medium text-foreground/70">Mod. B:</span> menor entre 90 días × SBC prom. 250 sem. y 11.5% del saldo RCV</p>
+          <p><span className="font-medium text-foreground/70">Sem. desc.:</span> monto retirado ÷ (saldo RCV ÷ sem. cotizadas) al momento del retiro</p>
+          <p><span className="font-medium text-foreground/70">Reintegro:</span> mismo monto nominal, sin intereses. Parcial o total. Sin plazo.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface RetiroParcial {
   fechaBaja: string;
   fechaReingreso: string;
@@ -150,9 +171,8 @@ export function RetirosDesempleo({
         next.add(idx);
         const used = Object.values(rowData).reduce((s, v) => s + v.semanas, 0);
         const remaining = Math.max(0, semanasDescontadas - used);
-        const idealSem = effectiveVPS > 0 ? Math.round(retiros[idx].montoRetiro / effectiveVPS) : remaining;
-        const maxForRetiro = effectiveVPS > 0 ? Math.ceil(retiros[idx].montoRetiro / effectiveVPS) : remaining;
-        const sem = remaining <= maxForRetiro ? remaining : Math.min(idealSem, remaining);
+        const idealSem = effectiveVPS > 0 ? Math.ceil(retiros[idx].montoRetiro / effectiveVPS) : remaining;
+        const sem = Math.min(idealSem, remaining);
         const monto = Math.round(sem * effectiveVPS * 100) / 100;
         setRowData((prev) => ({ ...prev, [idx]: { semanas: sem, monto } }));
       }
@@ -309,7 +329,9 @@ export function RetirosDesempleo({
                           {formatMXN(r.topeMensual)}
                         </td>
                         <td className="py-2 pr-3 text-right font-mono text-muted-foreground">
-                          {formatMXN(effectiveVPS)}
+                          {isSelected && data && data.semanas > 0
+                            ? formatMXN(r.montoRetiro / data.semanas)
+                            : formatMXN(effectiveVPS)}
                         </td>
                         <td className="py-2 pr-3 text-right">
                           {isSelected ? (
@@ -453,41 +475,8 @@ export function RetirosDesempleo({
           </p>
         ) : null}
 
-        {/* Reference */}
-        <div className="border-t border-wv-border/50 pt-3 space-y-2">
-          <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Referencia — Art. 191 y 198 LSS
-          </p>
-          <div className="text-[10px] sm:text-[11px] text-muted-foreground space-y-1">
-            <p>
-              <span className="font-medium text-foreground/70">
-                Elegibilidad:
-              </span>{" "}
-              46+ días sin empleo, mín. 5 años entre retiros
-            </p>
-            <p>
-              <span className="font-medium text-foreground/70">Mod. A:</span>{" "}
-              30 días × último SBC (tope: 10× UMA mensual)
-            </p>
-            <p>
-              <span className="font-medium text-foreground/70">Mod. B:</span>{" "}
-              menor entre 90 días × SBC prom. 250 sem. y 11.5% del saldo RCV
-            </p>
-            <p>
-              <span className="font-medium text-foreground/70">
-                Sem. desc.:
-              </span>{" "}
-              monto retirado ÷ (saldo RCV ÷ sem. cotizadas) al momento del
-              retiro
-            </p>
-            <p>
-              <span className="font-medium text-foreground/70">
-                Reintegro:
-              </span>{" "}
-              mismo monto nominal, sin intereses. Parcial o total. Sin plazo.
-            </p>
-          </div>
-        </div>
+        {/* Reference — collapsible */}
+        <ReferenceToggle />
       </div>
     </div>
   );
