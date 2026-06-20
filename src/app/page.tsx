@@ -924,14 +924,10 @@ export default function Home() {
   }, [result, edadInfo?.fechaNacimiento, ultimaCotizacion, pensionResult, esposa, hijos]);
 
   const actMinCumplePension = escenarios ? escenarios.pensionActual.pensionNeta < pensionMinimaVigente : false;
-  const actMinAcredita = isLey73 && !asesoriaAhoraCumple && !asesoriaFuturoCumple && !recupAcredita
-    && actMinCumpleEdad && actMinCumpleSemanas;
 
-  // Completar 500 Semanas — 5ta opción de financiamiento
+  // Completar 500 Semanas — criterios individuales
   const comp500CumpleEdad = edad >= 59;
   const comp500CumpleSemanas = semanasTotales >= 440;
-  const comp500Acredita = isLey73 && !asesoriaAhoraCumple && !asesoriaFuturoCumple && !recupAcredita && !actMinAcredita
-    && comp500CumpleEdad && comp500CumpleSemanas;
 
   // Cascada de calificación: si alguna descalifica, las siguientes no califican
   const calDescalificado = calPensionado === "definitivo"
@@ -960,6 +956,10 @@ export default function Home() {
   const acreditaAhora = pasaFiltrosBase && cumpleAforeConReintegro && asesoriaAhoraCumple && !perdioDerechos;
   const acreditaFuturo = pasaFiltrosBase && cumpleAforeConReintegro && asesoriaFuturoCumple && !perdioDerechos;
   const acreditaRecuperacion = isLey73 && !calDescalificado && !acreditaAhora && !acreditaFuturo && recupAcredita;
+  const actMinAcredita = isLey73 && !acreditaAhora && !acreditaFuturo && !recupAcredita
+    && actMinCumpleEdad && actMinCumpleSemanas;
+  const comp500Acredita = isLey73 && !acreditaAhora && !acreditaFuturo && !recupAcredita && !actMinAcredita
+    && comp500CumpleEdad && comp500CumpleSemanas;
 
   const calificacionLabel = !result ? null
     : calDescalificado ? (calPensionado === "definitivo" ? "Pensionado definitivo" : calNecesidad === "no" ? "No necesita financiamiento" : calSimulacion === "si_no_timbrados" ? "Simulación no timbrada" : calDemandas === "avanzada" ? "Demanda avanzada" : "Descalificado")
@@ -1499,138 +1499,6 @@ export default function Home() {
             )}
 
             {isLey73 && (<>
-            {/* Verdict Banner */}
-            {(() => {
-              const razones: string[] = [];
-              if (!isLey73) razones.push("Régimen Ley 97");
-              if (!cumpleSemanas) razones.push(`Faltan ${formatInt(semanasMinimas - semanasTotales)} semanas`);
-              if (!cumpleAfore) razones.push(`Faltante AFORE: ${formatMXN(faltante)}`);
-              if (modalidad === "mod10" && !mod10Cumple) razones.push("No cumple Modalidad 10");
-              if (modalidad === "mod40" && !mod40Cumple) razones.push("No cumple Modalidad 40");
-
-              if (calDescalificado) {
-                const motivo = calPensionado === "definitivo" ? "Pensionado definitivo"
-                  : calNecesidad === "no" ? "No necesita financiamiento"
-                  : calSimulacion === "si_no_timbrados" ? "Simulación no timbrada"
-                  : calDemandas === "avanzada" ? "Demanda avanzada" : "Descalificado";
-                return (
-                  <div className="rounded-xl sm:rounded-[16px] border-2 border-wv-red/30 bg-gradient-to-r from-wv-red/10 to-wv-surface px-4 sm:px-6 py-3 sm:py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="shrink-0 h-10 w-10 rounded-full bg-wv-red/10 flex items-center justify-center">
-                        <svg className="w-5 h-5 text-wv-red" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                      </div>
-                      <div>
-                        <p className="font-bold text-sm sm:text-lg text-wv-red">No califica — {motivo}</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              if (!isLey73) {
-                return (
-                  <div className="rounded-xl sm:rounded-[16px] border-2 border-wv-red/30 bg-gradient-to-r from-wv-red/10 to-wv-surface px-4 sm:px-6 py-3 sm:py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="shrink-0 h-10 w-10 rounded-full bg-wv-red/10 flex items-center justify-center">
-                        <svg className="w-5 h-5 text-wv-red" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                      </div>
-                      <div>
-                        <p className="font-bold text-sm sm:text-lg text-wv-red">No aplica — Régimen Ley 97</p>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">Solo se atienden clientes Ley 73 (alta antes del 1 julio 1997)</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              if (acreditaAhora) {
-                return (
-                  <div className="rounded-xl sm:rounded-[16px] border-2 border-wv-green/40 bg-gradient-to-r from-wv-green/10 to-wv-surface px-4 sm:px-6 py-3 sm:py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="shrink-0 h-10 w-10 rounded-full bg-wv-green/10 flex items-center justify-center">
-                        <svg className="w-5 h-5 text-wv-green" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                      </div>
-                      <div>
-                        <p className="font-bold text-sm sm:text-lg text-wv-green">Acredita Financiamiento Ahora</p>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{edad} años, {formatInt(semanasTotales)} semanas, {mesesSinCotizar} meses sin cotizar</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              if (acreditaFuturo) {
-                return (
-                  <div className="rounded-xl sm:rounded-[16px] border-2 border-wv-cyan/40 bg-gradient-to-r from-wv-cyan/10 to-wv-surface px-4 sm:px-6 py-3 sm:py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="shrink-0 h-10 w-10 rounded-full bg-wv-cyan/10 flex items-center justify-center">
-                        <svg className="w-5 h-5 text-wv-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
-                      </div>
-                      <div>
-                        <p className="font-bold text-sm sm:text-lg text-wv-cyan">Acredita Financiamiento Futuro</p>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
-                          {edad} años, {formatInt(semanasTotales)} semanas
-                          {!asesoriaAhoraCumple && (
-                            <span> — No acredita Ahora: {!asesoriaAhoraCumpleEdad ? `necesita 60 años (tiene ${edad})` : `necesita +12 meses sin cotizar (tiene ${mesesSinCotizar})`}</span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              if (actMinAcredita && !calDescalificado) {
-                return (
-                  <div className="rounded-xl sm:rounded-[16px] border-2 border-wv-green/40 bg-gradient-to-r from-wv-green/10 to-wv-surface px-4 sm:px-6 py-3 sm:py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="shrink-0 h-10 w-10 rounded-full bg-wv-green/10 flex items-center justify-center">
-                        <svg className="w-5 h-5 text-wv-green" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20V10" /><path d="M18 20V4" /><path d="M6 20v-4" /></svg>
-                      </div>
-                      <div>
-                        <p className="font-bold text-sm sm:text-lg text-wv-green">Acredita Actualización de Pensión Mínima</p>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
-                          Cotizar 3 meses en Mod 10 para actualizar pensión mínima al año vigente
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              if (comp500Acredita && !calDescalificado) {
-                return (
-                  <div className="rounded-xl sm:rounded-[16px] border-2 border-wv-green/40 bg-gradient-to-r from-wv-green/10 to-wv-surface px-4 sm:px-6 py-3 sm:py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="shrink-0 h-10 w-10 rounded-full bg-wv-green/10 flex items-center justify-center">
-                        <svg className="w-5 h-5 text-wv-green" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
-                      </div>
-                      <div>
-                        <p className="font-bold text-sm sm:text-lg text-wv-green">Califica para Completar 500 Semanas</p>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
-                          {formatInt(semanasTotales)} semanas cotizadas, {edad} años
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              return (
-                <div className="rounded-xl sm:rounded-[16px] border-2 border-wv-red/30 bg-gradient-to-r from-wv-red/10 to-wv-surface px-4 sm:px-6 py-3 sm:py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="shrink-0 h-10 w-10 rounded-full bg-wv-red/10 flex items-center justify-center">
-                      <svg className="w-5 h-5 text-wv-red" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                    </div>
-                    <div>
-                      <p className="font-bold text-sm sm:text-lg text-wv-red">No acredita financiamiento</p>
-                      <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{razones.length > 0 ? razones.join(" · ") : `${edad} años, ${mesesSinCotizar} meses sin cotizar`}</p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-
             {/* Validations — collapsible */}
             <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
               <DetailToggle label="Resultado de Calificación" defaultOpen={true} section>
@@ -1879,11 +1747,11 @@ export default function Home() {
                   <div className="space-y-2 sm:space-y-2.5">
                     {/* Fila 1: Ahora + Futuro */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 p-2 sm:p-2.5 rounded-xl border border-wv-border/50 bg-wv-surface/30">
-                      <div className={`rounded-lg overflow-hidden border ${asesoriaAhoraCumple ? "border-wv-green/40 bg-gradient-to-br from-wv-surface to-wv-green/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}>
+                      <div className={`rounded-lg overflow-hidden border ${acreditaAhora ? "border-wv-green/40 bg-gradient-to-br from-wv-surface to-wv-green/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}>
                         <div className="px-3 sm:px-4 py-2 sm:py-3 space-y-1.5">
                           <div className="flex items-center justify-between gap-2">
                             <p className="font-semibold text-xs sm:text-sm">Ahora</p>
-                            <StatusBadge pass={asesoriaAhoraCumple} labelPass="Acredita" labelFail="No acredita" />
+                            <StatusBadge pass={acreditaAhora} labelPass="Acredita" labelFail="No acredita" />
                           </div>
                           <div className="space-y-0.5">
                             <SubCheck pass={asesoriaAhoraCumpleEdad} label="Edad min. 60" value={`${edad} años`} />
@@ -1892,11 +1760,11 @@ export default function Home() {
                         </div>
                       </div>
 
-                      <div className={`rounded-lg overflow-hidden border ${asesoriaFuturoCumple ? "border-wv-green/40 bg-gradient-to-br from-wv-surface to-wv-green/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}>
+                      <div className={`rounded-lg overflow-hidden border ${acreditaFuturo ? "border-wv-green/40 bg-gradient-to-br from-wv-surface to-wv-green/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}>
                         <div className="px-3 sm:px-4 py-2 sm:py-3 space-y-1.5">
                           <div className="flex items-center justify-between gap-2">
                             <p className="font-semibold text-xs sm:text-sm">Futuro</p>
-                            <StatusBadge pass={asesoriaFuturoCumple} labelPass="Acredita" labelFail="No acredita" />
+                            <StatusBadge pass={acreditaFuturo} labelPass="Acredita" labelFail="No acredita" />
                           </div>
                           <div className="space-y-0.5">
                             <SubCheck pass={asesoriaFuturoCumpleEdad} label="Edad min. 59" value={`${edad} años`} />
@@ -2138,10 +2006,10 @@ export default function Home() {
                   </DetailToggle>
                 </section>
 
-                {/* Datos de Venta — condicional */}
+                {/* Guion de Venta — condicional */}
                 {escenarios && (
                   <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-                    <DetailToggle label="Datos de Venta" defaultOpen={!calDescalificado && (asesoriaAhoraCumple || asesoriaFuturoCumple)} section>
+                    <DetailToggle label="Guion de Venta" defaultOpen={!calDescalificado && (acreditaAhora || acreditaFuturo)} section>
                       <div className="space-y-1.5 text-xs sm:text-sm px-4 sm:px-5">
                         <div className="flex gap-2">
                           <span className="text-muted-foreground">Semanas cotizadas</span>
