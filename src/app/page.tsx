@@ -470,19 +470,19 @@ function calcMesPensionPronta(
   if (cumple60) {
     if (pasaron6Meses) {
       const mesPension = applyDay15Rule(hoy);
-      return { mesPension, razon: "Ya cumple 60 y ya pasaron 6 meses de conservacion. Se aplica regla del dia 15 a hoy.", cumple60, pasaron6Meses, fecha60, fecha6Meses };
+      return { mesPension, razon: "Ya cumple 60 y ya pasaron 6 meses de conservación. Se aplica regla del día 15 a hoy.", cumple60, pasaron6Meses, fecha60, fecha6Meses };
     } else {
       const mesPension = applyDay15Rule(fecha6Meses);
-      return { mesPension, razon: "Ya cumple 60 pero NO han pasado 6 meses. Se aplica regla del dia 15 a la fecha en que se cumplen 6 meses.", cumple60, pasaron6Meses, fecha60, fecha6Meses };
+      return { mesPension, razon: "Ya cumple 60 pero NO han pasado 6 meses. Se aplica regla del día 15 a la fecha en que se cumplen 6 meses.", cumple60, pasaron6Meses, fecha60, fecha6Meses };
     }
   } else {
     if (pasaron6Meses) {
       const mesPension = applyDay15Rule(fecha60);
-      return { mesPension, razon: "NO cumple 60 pero ya pasaron 6 meses. Se aplica regla del dia 15 al dia que cumple 60.", cumple60, pasaron6Meses, fecha60, fecha6Meses };
+      return { mesPension, razon: "NO cumple 60 pero ya pasaron 6 meses. Se aplica regla del día 15 al día que cumple 60.", cumple60, pasaron6Meses, fecha60, fecha6Meses };
     } else {
       const fechaLimite = fecha60.getTime() > fecha6Meses.getTime() ? fecha60 : fecha6Meses;
       const mesPension = applyDay15Rule(new Date(fechaLimite));
-      return { mesPension, razon: "NO cumple 60 y NO han pasado 6 meses. Se toma la fecha mas tardia (60 años o 6 meses) y se aplica regla del dia 15.", cumple60, pasaron6Meses, fecha60, fecha6Meses };
+      return { mesPension, razon: "NO cumple 60 y NO han pasado 6 meses. Se toma la fecha más tardía (60 años o 6 meses) y se aplica regla del día 15.", cumple60, pasaron6Meses, fecha60, fecha6Meses };
     }
   }
 }
@@ -1784,6 +1784,7 @@ export default function Home() {
                             <StatusBadge pass={acreditaRecuperacion} labelPass="Acredita" labelFail="No acredita" />
                           </div>
                           <div className="space-y-0.5">
+                            <SubCheck pass={perdioDerechos} label="Perdió derechos" value={perdioDerechos ? "Sí" : "No"} />
                             <SubCheck pass={recupCumpleEdad} label="Edad min. 59" value={`${edad} años`} />
                             <SubCheck pass={recupCumpleSemanas} label="Min. 430 semanas" value={`${formatInt(semanasTotales)} sem`} />
                             <SubCheck pass={recupCumpleAfore} label="AFORE min. $40,000" value={formatMXN(saldoAfore)} />
@@ -1802,6 +1803,7 @@ export default function Home() {
                           <div className="space-y-0.5">
                             <SubCheck pass={actMinCumpleEdad} label="Edad min. 59a 8m" value={edadExacta ? `${edadExacta.anos}a ${edadExacta.meses}m` : `${edad} años`} />
                             <SubCheck pass={actMinCumpleSemanas} label="Min. 470 semanas" value={`${formatInt(semanasTotales)} sem`} />
+                            <SubCheck pass={actMinCumpleSinCotizar} label="Min. 2 años sin cotizar" value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m` : `${Math.floor(diasSinCotizar / 365)}a`} />
                             <SubCheck pass={actMinCumplePension} label={`Pensión < mínima (${formatMXN(pensionMinimaVigente)})`} value={escenarios ? formatMXN(escenarios.pensionActual.pensionNeta) : "$0"} />
                           </div>
                         </div>
@@ -2005,7 +2007,7 @@ export default function Home() {
                   </DetailToggle>
                 </section>
 
-                {/* Guion de Venta — condicional */}
+                {/* Guion de Venta — datos + guión de ventas */}
                 {escenarios && (
                   <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
                     <DetailToggle label="Guion de Venta" defaultOpen={!calDescalificado && (acreditaAhora || acreditaFuturo)} section>
@@ -2054,14 +2056,8 @@ export default function Home() {
                           <span className="font-mono font-bold text-wv-green">{formatMXN(escenarios.pension6Meses.pensionNeta)}</span>
                         </div>
                       </div>
-                    </DetailToggle>
-                  </section>
-                )}
-
-                {/* Guión de Ventas — condicional según acreditación */}
-                {(acreditaAhora || acreditaFuturo || acreditaRecuperacion || actMinAcredita || comp500Acredita) && (
-                  <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-                    <DetailToggle label="Guión de Ventas" defaultOpen={false} section>
+                      {(acreditaAhora || acreditaFuturo || acreditaRecuperacion || actMinAcredita || comp500Acredita) && (
+                      <div className="border-t border-wv-border/30 mt-3">
                       <div className="px-4 sm:px-5 space-y-4 text-xs sm:text-sm leading-relaxed">
                         {(acreditaAhora || acreditaFuturo) && escenarios && (
                           <>
@@ -2127,6 +2123,8 @@ export default function Home() {
                           </>
                         )}
                       </div>
+                      </div>
+                      )}
                     </DetailToggle>
                   </section>
                 )}
@@ -2143,7 +2141,7 @@ export default function Home() {
                         <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
                           <MetricCard label="Semanas Cotizadas" value={formatInt(semanasTotales)} sub={`Cotizadas: ${formatInt(result.header.totalSemanasCotizadas)} | Desc: ${formatInt(result.header.semanasDescontadas)} | Reint: ${formatInt(result.header.semanasReintegradas)}`} />
                           <MetricCard label="Promedio Salarial" value={formatMXN(result.salaryAverage.promedio)} sub={`${formatMXN(result.salaryAverage.promedio * 30.4)} mensual`} />
-                          {edadExacta && <MetricCard label="Edad Actual" value={`${edadExacta.anos} años`} sub={`${edadExacta.anos} años, ${edadExacta.meses} meses, ${edadExacta.dias} dias`} />}
+                          {edadExacta && <MetricCard label="Edad Actual" value={`${edadExacta.anos} años`} sub={`${edadExacta.anos} años, ${edadExacta.meses} meses, ${edadExacta.dias} días`} />}
                         </div>
                       </section>
                       {pensionResult && (
