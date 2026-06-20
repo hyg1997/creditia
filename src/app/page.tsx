@@ -956,9 +956,9 @@ export default function Home() {
   const acreditaAhora = pasaFiltrosBase && cumpleAforeConReintegro && asesoriaAhoraCumple && !perdioDerechos;
   const acreditaFuturo = pasaFiltrosBase && cumpleAforeConReintegro && asesoriaFuturoCumple && !perdioDerechos;
   const acreditaRecuperacion = isLey73 && !calDescalificado && !acreditaAhora && !acreditaFuturo && recupAcredita;
-  const actMinAcredita = isLey73 && !acreditaAhora && !acreditaFuturo && !recupAcredita
-    && actMinCumpleEdad && actMinCumpleSemanas;
-  const comp500Acredita = isLey73 && !acreditaAhora && !acreditaFuturo && !recupAcredita && !actMinAcredita
+  const actMinAcredita = isLey73 && !calDescalificado && !acreditaAhora && !acreditaFuturo && !recupAcredita
+    && actMinCumpleEdad && actMinCumpleSemanas && actMinCumpleSinCotizar && actMinCumplePension;
+  const comp500Acredita = isLey73 && !calDescalificado && !acreditaAhora && !acreditaFuturo && !recupAcredita && !actMinAcredita
     && comp500CumpleEdad && comp500CumpleSemanas;
 
   const calificacionLabel = !result ? null
@@ -1579,7 +1579,7 @@ export default function Home() {
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] sm:text-xs text-muted-foreground">
-                        <span>Sin trabajar: {sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.dias}d` : "—"}</span>
+                        <span>Sin trabajar: {sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : "—"}</span>
                         <span>Requerido: {formatMXN(montoRequerido)}</span>
                         <span>Saldo actual: {formatMXN(saldoAfore)}</span>
                       </div>
@@ -1777,12 +1777,12 @@ export default function Home() {
                     {/* Fila 2: Recuperar Derechos + Act. Pensión Mínima + Completar 500 */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5 p-2 sm:p-2.5 rounded-xl border border-wv-border/50 bg-wv-surface/30">
                       <div
-                        className={`rounded-lg overflow-hidden border ${recupAcredita ? "border-wv-green/40 bg-gradient-to-br from-wv-surface to-wv-green/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
+                        className={`rounded-lg overflow-hidden border ${acreditaRecuperacion ? "border-wv-green/40 bg-gradient-to-br from-wv-surface to-wv-green/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
                       >
                         <div className="px-3 sm:px-4 py-2 sm:py-3 space-y-1.5">
                           <div className="flex items-center justify-between gap-2">
                             <p className="font-semibold text-xs sm:text-sm">Recuperar Derechos</p>
-                            <StatusBadge pass={recupAcredita} labelPass="Acredita" labelFail="No acredita" />
+                            <StatusBadge pass={acreditaRecuperacion} labelPass="Acredita" labelFail="No acredita" />
                           </div>
                           <div className="space-y-0.5">
                             <SubCheck pass={recupCumpleEdad} label="Edad min. 59" value={`${edad} años`} />
@@ -2095,10 +2095,10 @@ export default function Home() {
                             <div className="space-y-1.5">
                               <div className="flex gap-2"><span className="text-muted-foreground"># Semanas</span><span className="font-mono font-semibold">{formatInt(semanasTotales)} sem / {Math.floor(semanasTotales * 7 / 365)}a {Math.floor((semanasTotales * 7 % 365) / 30)}m {(semanasTotales * 7 % 365) % 30}d</span></div>
                               <div className="flex gap-2"><span className="text-muted-foreground">Conservación de derechos</span><span className="font-mono font-semibold">{formatInt(semanasConservacion)} sem / {Math.floor(diasConservacion / 365)}a {Math.floor((diasConservacion % 365) / 30)}m {(diasConservacion % 365) % 30}d</span></div>
-                              <div className="flex gap-2"><span className="text-muted-foreground">Tiempo sin trabajar</span><span className="font-mono font-semibold">{formatInt(Math.ceil(diasSinCotizar / 7))} sem / {sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.dias}d` : "—"}</span></div>
+                              <div className="flex gap-2"><span className="text-muted-foreground">Tiempo sin trabajar</span><span className="font-mono font-semibold">{formatInt(Math.ceil(diasSinCotizar / 7))} sem / {sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : "—"}</span></div>
                             </div>
                             <div className="border-t border-wv-border/30 pt-3 space-y-3 text-foreground/90">
-                              <p>Perfecto, pues mira, en tu caso en este momento no tienes derechos de pensión porque llevas sin trabajar más del 25% de las semanas que tienes cotizadas, o sea, tienes <span className="font-semibold text-foreground">{sinTrabajar ? `${sinTrabajar.anos} años, ${sinTrabajar.meses} meses y ${sinTrabajar.dias} días` : "—"}</span> de tiempo sin trabajar, pero tu conservación era de <span className="font-semibold text-foreground">{Math.floor(diasConservacion / 365)} años, {Math.floor((diasConservacion % 365) / 30)} meses y {(diasConservacion % 365) % 30} días</span>, por eso es que ya perdiste tu derecho.</p>
+                              <p>Perfecto, pues mira, en tu caso en este momento no tienes derechos de pensión porque llevas sin trabajar más del 25% de las semanas que tienes cotizadas, o sea, tienes <span className="font-semibold text-foreground">{sinTrabajar ? `${sinTrabajar.anos} años, ${sinTrabajar.meses} meses y ${sinTrabajar.diasRestantes} días` : "—"}</span> de tiempo sin trabajar, pero tu conservación era de <span className="font-semibold text-foreground">{Math.floor(diasConservacion / 365)} años, {Math.floor((diasConservacion % 365) / 30)} meses y {(diasConservacion % 365) % 30} días</span>, por eso es que ya perdiste tu derecho.</p>
                               <p>La buena noticia es que se pueden recuperar tus derechos. Por eso aquí lo que hacemos es agendarte una asesoría con nuestro experto en pensiones para entender si se pueden recuperar tus derechos con modalidad 40 o tiene que ser con modalidad 10, que nos diga cuánto tiempo hay que cotizar para recuperar derechos y todo lo que se tiene que hacer para que alcances la mejor pensión para tu caso en específico.</p>
                               <p className="text-wv-cyan italic">¿Para ti sería viable que revisara si pudiera agendarte esta asesoría con nuestro experto?</p>
                             </div>
