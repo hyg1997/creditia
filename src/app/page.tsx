@@ -732,15 +732,12 @@ function MetricCard({ label, value, sub }: { label: string; value: string; sub?:
   );
 }
 
-type Tab = "calculadora" | "asesoria";
-
 export default function Home() {
   const [result, setResult] = useState<ApiResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [tieneCredito, setTieneCredito] = useState(false);
   const [montoCredito, setMontoCredito] = useState(0);
-  const [activeTab, setActiveTab] = useState<Tab>("calculadora");
   const [esposa, setEsposa] = useState(true);
   const [hijos, setHijos] = useState(0);
   const [rangosEdad, setRangosEdad] = useState<RangoEdad[]>(DEFAULT_RANGOS.map(r => ({ ...r })));
@@ -783,7 +780,6 @@ export default function Home() {
     setError(null);
     setTieneCredito(false);
     setMontoCredito(0);
-    setActiveTab("calculadora");
     setEsposa(true);
     setHijos(0);
     setCalPensionado(null);
@@ -961,8 +957,8 @@ export default function Home() {
 
   const cumpleModalidad = modalidad === "mod10" ? mod10Cumple : modalidad === "mod40" ? mod40Cumple : true;
   const pasaFiltrosBase = isLey73 && cumpleSemanas && cumpleModalidad && !calDescalificado;
-  const acreditaAhora = pasaFiltrosBase && cumpleAforeConReintegro && asesoriaAhoraCumple;
-  const acreditaFuturo = pasaFiltrosBase && cumpleAforeConReintegro && asesoriaFuturoCumple;
+  const acreditaAhora = pasaFiltrosBase && cumpleAforeConReintegro && asesoriaAhoraCumple && !perdioDerechos;
+  const acreditaFuturo = pasaFiltrosBase && cumpleAforeConReintegro && asesoriaFuturoCumple && !perdioDerechos;
   const acreditaRecuperacion = isLey73 && !calDescalificado && !acreditaAhora && !acreditaFuturo && recupAcredita;
 
   const calificacionLabel = !result ? null
@@ -1502,33 +1498,7 @@ export default function Home() {
               </section>
             )}
 
-            {/* Tab Navigation */}
-            {isLey73 && (
-              <div className="flex gap-1 bg-wv-surface rounded-xl border border-wv-border p-1 no-print">
-                <button
-                  onClick={() => setActiveTab("calculadora")}
-                  className={`flex-1 px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
-                    activeTab === "calculadora"
-                      ? "bg-wv-cyan/10 text-wv-cyan"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                  }`}
-                >
-                  Calculadora
-                </button>
-                <button
-                  onClick={() => setActiveTab("asesoria")}
-                  className={`flex-1 px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
-                    activeTab === "asesoria"
-                      ? "bg-wv-cyan/10 text-wv-cyan"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                  }`}
-                >
-                  Asesoria
-                </button>
-              </div>
-            )}
-
-            {activeTab === "calculadora" && (<>
+            {isLey73 && (<>
             {/* Verdict Banner */}
             {(() => {
               const razones: string[] = [];
@@ -1610,24 +1580,6 @@ export default function Home() {
                 );
               }
 
-              if (acreditaRecuperacion) {
-                return (
-                  <div className="rounded-xl sm:rounded-[16px] border-2 border-wv-green/40 bg-gradient-to-r from-wv-green/10 to-wv-surface px-4 sm:px-6 py-3 sm:py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="shrink-0 h-10 w-10 rounded-full bg-wv-green/10 flex items-center justify-center">
-                        <svg className="w-5 h-5 text-wv-green" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /><polyline points="21 3 21 8 16 8" /></svg>
-                      </div>
-                      <div>
-                        <p className="font-bold text-sm sm:text-lg text-wv-green">Acredita Recuperación de Derechos</p>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
-                          Perdió derechos — requiere {semanasNuevasRequeridas > 0 ? `${semanasNuevasRequeridas} semanas nuevas ininterrumpidas (Art. 151)` : "cotizar 1 mes en Mod 10"} para recuperar
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
               if (actMinAcredita && !calDescalificado) {
                 return (
                   <div className="rounded-xl sm:rounded-[16px] border-2 border-wv-green/40 bg-gradient-to-r from-wv-green/10 to-wv-surface px-4 sm:px-6 py-3 sm:py-4">
@@ -1681,8 +1633,9 @@ export default function Home() {
 
             {/* Validations — collapsible */}
             <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-              <DetailToggle label="Fin. Mod. 40 Retroactivo" defaultOpen={false} section>
+              <DetailToggle label="Resultado de Calificación" defaultOpen={true} section>
               <div className="space-y-2 sm:space-y-2.5">
+                <p className="px-3.5 sm:px-4 text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground">Fin. Mod. 40 Retroactivo</p>
                 {/* Ley 73 */}
                 <div className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5">
                   <p className={`font-medium text-xs sm:text-sm ${isLey73 ? "" : "text-wv-red"}`}>Ley 73</p>
@@ -2238,6 +2191,130 @@ export default function Home() {
                   </section>
                 )}
 
+                {/* Datos de Asesoría — collapsible */}
+                <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
+                  <DetailToggle label="Datos de Asesoría" defaultOpen={false} section>
+                    <div className="px-4 sm:px-5 space-y-4">
+                      <section>
+                        <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
+                          <div className="h-4 w-1 rounded-full bg-wv-cyan" />
+                          <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">Métricas del Expediente</h2>
+                        </div>
+                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+                          <MetricCard label="Semanas Cotizadas" value={formatInt(semanasTotales)} sub={`Cotizadas: ${formatInt(result.header.totalSemanasCotizadas)} | Desc: ${formatInt(result.header.semanasDescontadas)} | Reint: ${formatInt(result.header.semanasReintegradas)}`} />
+                          <MetricCard label="Promedio Salarial" value={formatMXN(result.salaryAverage.promedio)} sub={`${formatMXN(result.salaryAverage.promedio * 30.4)} mensual`} />
+                          {edadExacta && <MetricCard label="Edad Actual" value={`${edadExacta.anos} años`} sub={`${edadExacta.anos} años, ${edadExacta.meses} meses, ${edadExacta.dias} dias`} />}
+                        </div>
+                      </section>
+                      {pensionResult && (
+                        <section>
+                          <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
+                            <div className="h-4 w-1 rounded-full bg-wv-green" />
+                            <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">Mi Pensión Pronta</h2>
+                          </div>
+                          <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
+                            <div className="border-l-4 border-l-wv-green px-4 sm:px-5 py-4 sm:py-5 space-y-4">
+                              <div className="flex items-center justify-between gap-4">
+                                <div>
+                                  <p className="text-[10px] sm:text-xs uppercase tracking-wider text-muted-foreground font-medium">Pensión desde</p>
+                                  <p className="text-2xl sm:text-3xl font-bold font-mono text-wv-green mt-1">{formatMesAno(pensionResult.mesPension)}</p>
+                                </div>
+                                {mesesRetroactivo !== null && mesesRetroactivo > 0 && (
+                                  <div className="text-right">
+                                    <p className="text-[10px] sm:text-xs uppercase tracking-wider text-muted-foreground font-medium">Meses en retroactivo</p>
+                                    <p className="text-2xl sm:text-3xl font-bold font-mono text-wv-cyan mt-1">{mesesRetroactivo}</p>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                <div className={`rounded-lg p-2.5 border ${pensionResult.cumple60 ? "bg-wv-green/5 border-wv-green/20" : "bg-wv-red/5 border-wv-red/20"}`}>
+                                  <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Cumple 60 años</p>
+                                  <p className={`text-xs sm:text-sm font-semibold mt-0.5 ${pensionResult.cumple60 ? "text-wv-green" : "text-wv-red"}`}>
+                                    {pensionResult.cumple60 ? "Sí" : "No"}
+                                    {!pensionResult.cumple60 && pensionResult.fecha60 && <span className="text-muted-foreground font-normal text-[10px]"> — cumple el {pensionResult.fecha60.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}</span>}
+                                  </p>
+                                </div>
+                                <div className={`rounded-lg p-2.5 border ${pensionResult.pasaron6Meses ? "bg-wv-green/5 border-wv-green/20" : "bg-wv-red/5 border-wv-red/20"}`}>
+                                  <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">6 meses conservación</p>
+                                  <p className={`text-xs sm:text-sm font-semibold mt-0.5 ${pensionResult.pasaron6Meses ? "text-wv-green" : "text-wv-red"}`}>
+                                    {pensionResult.pasaron6Meses ? "Sí" : "No"}
+                                    {!pensionResult.pasaron6Meses && <span className="text-muted-foreground font-normal text-[10px]"> — {pensionResult.fecha6Meses.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}</span>}
+                                  </p>
+                                </div>
+                                <div className="rounded-lg p-2.5 border border-wv-border bg-muted/30">
+                                  <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Última cotización</p>
+                                  <p className="text-xs sm:text-sm font-semibold mt-0.5">{ultimaCotizacion?.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}</p>
+                                </div>
+                                <div className="rounded-lg p-2.5 border border-wv-border bg-muted/30">
+                                  <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Regla día 15</p>
+                                  <p className="text-xs sm:text-sm font-semibold mt-0.5 text-muted-foreground">{pensionResult.razon.includes("hoy") ? "Aplicada a hoy" : "Aplicada a fecha futura"}</p>
+                                </div>
+                              </div>
+                              <p className="text-[10px] sm:text-[11px] text-muted-foreground italic">{pensionResult.razon}</p>
+                            </div>
+                          </div>
+                        </section>
+                      )}
+                      {escenarios && (
+                        <section>
+                          <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
+                            <div className="h-4 w-1 rounded-full bg-wv-cyan" />
+                            <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">Escenarios de Pensión</h2>
+                            <span className="text-[9px] sm:text-[10px] text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full">Mod 40 Retroactivo</span>
+                          </div>
+                          <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
+                            <div className="px-4 sm:px-5 py-4 sm:py-5 space-y-4">
+                              <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+                                <label className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground cursor-pointer">
+                                  <input type="checkbox" checked={esposa} onChange={(e) => setEsposa(e.target.checked)} className="rounded border-wv-border" />
+                                  Esposa/concubina
+                                </label>
+                                <label className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground">
+                                  Hijos
+                                  <select value={hijos} onChange={(e) => setHijos(Number(e.target.value))} className="rounded border border-wv-border bg-background px-1.5 py-0.5 text-[10px] sm:text-xs font-mono">
+                                    {[0, 1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
+                                  </select>
+                                </label>
+                                <span className="text-[9px] sm:text-[10px] text-muted-foreground">SBC Mod 40: {formatMXN(escenarios.mod40Salary)} diario (25 UMA)</span>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div className="rounded-xl border-2 border-wv-border bg-muted/20 p-4">
+                                  <div className="text-center">
+                                    <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Pensión Actual</p>
+                                    <p className="text-xl sm:text-2xl font-bold font-mono mt-1">{formatMXN(escenarios.pensionActual.pensionNeta)}</p>
+                                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">mensual neta</p>
+                                  </div>
+                                  <PensionSteps result={escenarios.pensionActual} label="Actual" />
+                                </div>
+                                <div className="rounded-xl border-2 border-wv-green/40 bg-wv-green/5 p-4">
+                                  <div className="text-center">
+                                    <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Pensión Pronta</p>
+                                    {pensionResult && <p className="text-[9px] sm:text-[10px] text-wv-green/70 font-medium">{formatMesAno(pensionResult.mesPension)}</p>}
+                                    <p className="text-xl sm:text-2xl font-bold font-mono mt-1 text-wv-green">{formatMXN(escenarios.pensionPronta.pensionNeta)}</p>
+                                    <p className="text-xs sm:text-sm font-semibold text-wv-green mt-1">+{formatMXN(escenarios.incremento1)}</p>
+                                    <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">Prom: {formatMXN(escenarios.promedioE1)} · {Math.round(escenarios.mod40WeeksE1)} sem M40</p>
+                                  </div>
+                                  <PensionSteps result={escenarios.pensionPronta} label="Pronta" />
+                                </div>
+                                <div className="rounded-xl border-2 border-wv-cyan/40 bg-wv-cyan/5 p-4">
+                                  <div className="text-center">
+                                    <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Pensión +6 Meses</p>
+                                    {pensionResult && <p className="text-[9px] sm:text-[10px] text-wv-cyan/70 font-medium">{formatMesAno(addMonths(pensionResult.mesPension, 6))}</p>}
+                                    <p className="text-xl sm:text-2xl font-bold font-mono mt-1 text-wv-cyan">{formatMXN(escenarios.pension6Meses.pensionNeta)}</p>
+                                    <p className="text-xs sm:text-sm font-semibold text-wv-cyan mt-1">+{formatMXN(escenarios.incremento2)}</p>
+                                    <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">Prom: {formatMXN(escenarios.promedioE2)} · {Math.round(escenarios.mod40WeeksE2)} sem M40</p>
+                                  </div>
+                                  <PensionSteps result={escenarios.pension6Meses} label="+6 Meses" />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </section>
+                      )}
+                    </div>
+                  </DetailToggle>
+                </section>
+
                 <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
                   <DetailToggle label="Promedio Salarial" defaultOpen={false} section>
                     <div className="px-4 sm:px-5">
@@ -2278,180 +2355,6 @@ export default function Home() {
             )}
             </>)}
 
-            {activeTab === "asesoria" && isLey73 && (
-              <>
-                {/* Key Metrics */}
-                <section>
-                  <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
-                    <div className="h-4 w-1 rounded-full bg-wv-cyan" />
-                    <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">Metricas del Expediente</h2>
-                  </div>
-                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
-                    <MetricCard
-                      label="Semanas Cotizadas"
-                      value={formatInt(semanasTotales)}
-                      sub={`Cotizadas: ${formatInt(result.header.totalSemanasCotizadas)} | Desc: ${formatInt(result.header.semanasDescontadas)} | Reint: ${formatInt(result.header.semanasReintegradas)}`}
-                    />
-                    <MetricCard
-                      label="Promedio Salarial"
-                      value={formatMXN(result.salaryAverage.promedio)}
-                      sub={`${formatMXN(result.salaryAverage.promedio * 30.4)} mensual`}
-                    />
-                    {edadExacta && (
-                      <MetricCard
-                        label="Edad Actual"
-                        value={`${edadExacta.anos} años`}
-                        sub={`${edadExacta.anos} años, ${edadExacta.meses} meses, ${edadExacta.dias} dias`}
-                      />
-                    )}
-                  </div>
-                </section>
-
-                {/* Mes Pension Pronta */}
-                {pensionResult && (
-                  <section>
-                    <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
-                      <div className="h-4 w-1 rounded-full bg-wv-green" />
-                      <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">Mes Pension Pronta</h2>
-                    </div>
-                    <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-                      <div className="border-l-4 border-l-wv-green px-4 sm:px-5 py-4 sm:py-5 space-y-4">
-                        <div className="flex items-center justify-between gap-4">
-                          <div>
-                            <p className="text-[10px] sm:text-xs uppercase tracking-wider text-muted-foreground font-medium">Pension desde</p>
-                            <p className="text-2xl sm:text-3xl font-bold font-mono text-wv-green mt-1">
-                              {formatMesAno(pensionResult.mesPension)}
-                            </p>
-                          </div>
-                          {mesesRetroactivo !== null && mesesRetroactivo > 0 && (
-                            <div className="text-right">
-                              <p className="text-[10px] sm:text-xs uppercase tracking-wider text-muted-foreground font-medium">Meses en retroactivo</p>
-                              <p className="text-2xl sm:text-3xl font-bold font-mono text-wv-cyan mt-1">
-                                {mesesRetroactivo}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                          <div className={`rounded-lg p-2.5 border ${pensionResult.cumple60 ? "bg-wv-green/5 border-wv-green/20" : "bg-wv-red/5 border-wv-red/20"}`}>
-                            <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Cumple 60 años</p>
-                            <p className={`text-xs sm:text-sm font-semibold mt-0.5 ${pensionResult.cumple60 ? "text-wv-green" : "text-wv-red"}`}>
-                              {pensionResult.cumple60 ? "Si" : "No"}
-                              {!pensionResult.cumple60 && pensionResult.fecha60 && (
-                                <span className="text-muted-foreground font-normal text-[10px]"> — cumple el {pensionResult.fecha60.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}</span>
-                              )}
-                            </p>
-                          </div>
-                          <div className={`rounded-lg p-2.5 border ${pensionResult.pasaron6Meses ? "bg-wv-green/5 border-wv-green/20" : "bg-wv-red/5 border-wv-red/20"}`}>
-                            <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">6 meses conservacion</p>
-                            <p className={`text-xs sm:text-sm font-semibold mt-0.5 ${pensionResult.pasaron6Meses ? "text-wv-green" : "text-wv-red"}`}>
-                              {pensionResult.pasaron6Meses ? "Si" : "No"}
-                              {!pensionResult.pasaron6Meses && (
-                                <span className="text-muted-foreground font-normal text-[10px]"> — {pensionResult.fecha6Meses.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}</span>
-                              )}
-                            </p>
-                          </div>
-                          <div className="rounded-lg p-2.5 border border-wv-border bg-muted/30">
-                            <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Ultima cotizacion</p>
-                            <p className="text-xs sm:text-sm font-semibold mt-0.5">
-                              {ultimaCotizacion?.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
-                            </p>
-                          </div>
-                          <div className="rounded-lg p-2.5 border border-wv-border bg-muted/30">
-                            <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Regla dia 15</p>
-                            <p className="text-xs sm:text-sm font-semibold mt-0.5 text-muted-foreground">
-                              {pensionResult.razon.includes("hoy") ? "Aplicada a hoy" : "Aplicada a fecha futura"}
-                            </p>
-                          </div>
-                        </div>
-                        <p className="text-[10px] sm:text-[11px] text-muted-foreground italic">
-                          {pensionResult.razon}
-                        </p>
-                      </div>
-                    </div>
-                  </section>
-                )}
-
-                {/* Pension Scenarios */}
-                {escenarios && (
-                  <section>
-                    <div className="flex items-center gap-2.5 mb-2.5 sm:mb-3">
-                      <div className="h-4 w-1 rounded-full bg-wv-cyan" />
-                      <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">Escenarios de Pension</h2>
-                      <span className="text-[9px] sm:text-[10px] text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full">Mod 40 Retroactivo</span>
-                    </div>
-                    <div className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-                      <div className="px-4 sm:px-5 py-4 sm:py-5 space-y-4">
-                        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-                          <label className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={esposa}
-                              onChange={(e) => setEsposa(e.target.checked)}
-                              className="rounded border-wv-border"
-                            />
-                            Esposa/concubina
-                          </label>
-                          <label className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground">
-                            Hijos
-                            <select
-                              value={hijos}
-                              onChange={(e) => setHijos(Number(e.target.value))}
-                              className="rounded border border-wv-border bg-background px-1.5 py-0.5 text-[10px] sm:text-xs font-mono"
-                            >
-                              {[0, 1, 2, 3, 4, 5].map((n) => (
-                                <option key={n} value={n}>{n}</option>
-                              ))}
-                            </select>
-                          </label>
-                          <span className="text-[9px] sm:text-[10px] text-muted-foreground">
-                            SBC Mod 40: {formatMXN(escenarios.mod40Salary)} diario (25 UMA)
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div className="rounded-xl border-2 border-wv-border bg-muted/20 p-4">
-                            <div className="text-center">
-                              <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Pension Actual</p>
-                              <p className="text-xl sm:text-2xl font-bold font-mono mt-1">{formatMXN(escenarios.pensionActual.pensionNeta)}</p>
-                              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">mensual neta</p>
-                            </div>
-                            <PensionSteps result={escenarios.pensionActual} label="Actual" />
-                          </div>
-                          <div className="rounded-xl border-2 border-wv-green/40 bg-wv-green/5 p-4">
-                            <div className="text-center">
-                              <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Pension Pronta</p>
-                              {pensionResult && (
-                                <p className="text-[9px] sm:text-[10px] text-wv-green/70 font-medium">{formatMesAno(pensionResult.mesPension)}</p>
-                              )}
-                              <p className="text-xl sm:text-2xl font-bold font-mono mt-1 text-wv-green">{formatMXN(escenarios.pensionPronta.pensionNeta)}</p>
-                              <p className="text-xs sm:text-sm font-semibold text-wv-green mt-1">+{formatMXN(escenarios.incremento1)}</p>
-                              <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">
-                                Prom: {formatMXN(escenarios.promedioE1)} · {Math.round(escenarios.mod40WeeksE1)} sem M40
-                              </p>
-                            </div>
-                            <PensionSteps result={escenarios.pensionPronta} label="Pronta" />
-                          </div>
-                          <div className="rounded-xl border-2 border-wv-cyan/40 bg-wv-cyan/5 p-4">
-                            <div className="text-center">
-                              <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Pension +6 Meses</p>
-                              {pensionResult && (
-                                <p className="text-[9px] sm:text-[10px] text-wv-cyan/70 font-medium">{formatMesAno(addMonths(pensionResult.mesPension, 6))}</p>
-                              )}
-                              <p className="text-xl sm:text-2xl font-bold font-mono mt-1 text-wv-cyan">{formatMXN(escenarios.pension6Meses.pensionNeta)}</p>
-                              <p className="text-xs sm:text-sm font-semibold text-wv-cyan mt-1">+{formatMXN(escenarios.incremento2)}</p>
-                              <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">
-                                Prom: {formatMXN(escenarios.promedioE2)} · {Math.round(escenarios.mod40WeeksE2)} sem M40
-                              </p>
-                            </div>
-                            <PensionSteps result={escenarios.pension6Meses} label="+6 Meses" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </section>
-                )}
-              </>
-            )}
           </div>
         )}
       </div>
