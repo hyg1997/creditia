@@ -44,10 +44,6 @@ function getUMA(year: number): number {
   return UMA_DIARIO_POR_AÑO[2026];
 }
 
-function topeUMAMensual(year: number): number {
-  return 10 * getUMA(year) * 30.4;
-}
-
 interface MergedPeriod {
   inicio: Date;
   fin: Date;

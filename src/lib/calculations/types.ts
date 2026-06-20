@@ -89,23 +89,6 @@ export interface SalaryAverageResult {
   }[];
 }
 
-export interface PensionLey73Estimate {
-  sbcPromedioDiario: number;
-  sbcPromedioMensual: number;
-  semanasReconocidas: number;
-  grupoSalarial: number;
-  cuantiaBasicaPct: number;
-  incrementoAnualPct: number;
-  anosExcedentes: number;
-  porcentajeTotal: number;
-  estimaciones: {
-    edad: number;
-    factorEdad: number;
-    pensionMensual: number;
-  }[];
-  pensionMinima: number;
-}
-
 export interface RetiroParcial {
   fechaBaja: Date;
   fechaReingreso: Date;
@@ -129,6 +112,4 @@ export interface CalculationResult {
   salaryAverage: SalaryAverageResult;
   afore: AforeResult;
   retirosDesempleo: RetirosDesempleoResult;
-  pensionLey73?: PensionLey73Estimate;
-  advertencias: string[];
 }

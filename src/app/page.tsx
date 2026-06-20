@@ -813,7 +813,6 @@ export default function Home() {
     ? Math.round(sinTrabajar.dias * costoDiario)
     : 0;
   const cumpleAfore = saldoAfore >= montoRequerido;
-  const faltante = Math.max(0, montoRequerido - saldoAfore);
 
   const ultimoRegistro = result ? getUltimoRegistro(result.records) : null;
   const modalidad = ultimoRegistro

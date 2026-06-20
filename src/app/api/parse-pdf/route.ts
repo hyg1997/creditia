@@ -69,8 +69,6 @@ export async function POST(request: NextRequest) {
         })),
         totalDevolver: result.retirosDesempleo.totalDevolver,
       },
-      pensionLey73: result.pensionLey73 ?? null,
-      advertencias: result.advertencias,
     };
 
     return NextResponse.json(serialized);
