@@ -643,7 +643,7 @@ function DetailToggle({ label, children, defaultOpen = false, section = false }:
         className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer font-medium"
       >
         <svg className={`w-3 h-3 transition-transform ${open ? "rotate-90" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
-        {label ?? "Ver cómo se calculó"}
+        {label !== undefined ? label : "Ver cómo se calculó"}
       </button>
       {open && (
         <div className="mt-2 space-y-1 text-[9px] sm:text-[10px] text-muted-foreground font-mono leading-relaxed">
@@ -1320,7 +1320,7 @@ export default function Home() {
             {/* Calificación — formulario interactivo */}
             {isLey73 && (
               <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden no-print">
-                <DetailToggle label="Calificación" defaultOpen={false} section><div className="space-y-3 px-4 sm:px-5">
+                <DetailToggle label="Calificación" defaultOpen={true} section><div className="space-y-3 px-4 sm:px-5">
 
                 {/* 1. ¿Está pensionado? */}
                 <div className="space-y-1.5">
@@ -1365,7 +1365,7 @@ export default function Home() {
                 )}
 
                 {/* 3. Simulación */}
-                {calPensionado !== "definitivo" && calNecesidad === "si" && (
+                {(
                   <div className="space-y-1.5">
                     <p className="text-xs sm:text-sm font-medium">¿Tiene simulación de pensión?</p>
                     <div className="flex flex-wrap gap-1.5">
@@ -1389,7 +1389,7 @@ export default function Home() {
                 )}
 
                 {/* 4. Demandas */}
-                {calPensionado !== "definitivo" && calNecesidad === "si" && calSimulacion !== "si_no_timbrados" && (
+                {(
                   <div className="space-y-1.5">
                     <p className="text-xs sm:text-sm font-medium">¿Tiene demandas?</p>
                     <div className="flex flex-wrap gap-1.5">
@@ -1413,7 +1413,7 @@ export default function Home() {
                 )}
 
                 {/* 5. Crédito INFONAVIT */}
-                {!calDescalificado && (
+                {(
                   <div className="space-y-1.5">
                     <p className="text-xs sm:text-sm font-medium">¿Tiene crédito INFONAVIT?</p>
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -1448,56 +1448,43 @@ export default function Home() {
                   </div>
                 )}
 
+                {/* 6. Reintegro de semanas */}
+                {result.header.semanasDescontadas > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs sm:text-sm font-medium">Reintegro de semanas descontadas</p>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={calReintegroManual !== null ? formatInt(calReintegroManual) : formatInt(result.retirosDesempleo?.totalDevolver ?? 0)}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9]/g, "");
+                            setCalReintegroManual(raw ? Math.max(0, Number(raw)) : 0);
+                          }}
+                          placeholder="0"
+                          className="w-32 rounded-lg border border-wv-border bg-background pl-6 pr-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-wv-cyan focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+                    <DetailToggle label="Ver retiros por desempleo">
+                      <RetirosDesempleo
+                        retiros={result.retirosDesempleo.retiros}
+                        semanasDescontadas={result.header.semanasDescontadas}
+                        totalRCVBruto={result.afore.totalRCVBruto}
+                        semanasReconocidas={result.header.semanasReconocidas}
+                      />
+                    </DetailToggle>
+                  </div>
+                )}
+
                 {calDescalificado && (
                   <div className="rounded-lg p-3 bg-wv-red/10 border border-wv-red/20">
                     <p className="text-xs font-medium text-wv-red">Descalificado — no califica para ningún financiamiento</p>
                   </div>
                 )}
                 </div></DetailToggle>
-              </section>
-            )}
-
-            {/* Retiros por Desempleo — moved up per mockup */}
-            {isLey73 &&
-              (result.retirosDesempleo.retiros.length > 0 ||
-                result.header.semanasDescontadas > 0) && (
-                <section>
-                  <RetirosDesempleo
-                    retiros={result.retirosDesempleo.retiros}
-                    semanasDescontadas={result.header.semanasDescontadas}
-                    totalRCVBruto={result.afore.totalRCVBruto}
-                    semanasReconocidas={result.header.semanasReconocidas}
-                  />
-                </section>
-              )}
-
-            {/* Reintegro de semanas — independent section */}
-            {isLey73 && !calDescalificado && result.header.semanasDescontadas > 0 && (
-              <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none px-4 sm:px-5 py-3 sm:py-4 space-y-1.5">
-                <p className="text-xs sm:text-sm font-medium">Reintegro de semanas descontadas</p>
-                <p className="text-[10px] sm:text-[11px] text-muted-foreground">
-                  {result.header.semanasDescontadas} semanas descontadas — cálculo de apoyo: {formatMXN(result.retirosDesempleo?.totalDevolver ?? 0)}
-                </p>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium">Registrar monto a reintegrar:</span>
-                  <div className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={calReintegroManual !== null ? formatInt(calReintegroManual) : formatInt(result.retirosDesempleo?.totalDevolver ?? 0)}
-                      onChange={(e) => {
-                        const raw = e.target.value.replace(/[^0-9]/g, "");
-                        setCalReintegroManual(raw ? Math.max(0, Number(raw)) : 0);
-                      }}
-                      placeholder="0"
-                      className="w-32 rounded-lg border border-wv-border bg-background pl-6 pr-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-wv-cyan focus:border-transparent"
-                    />
-                  </div>
-                </div>
-                <p className="text-[9px] text-muted-foreground">
-                  El monto de reintegro se suma al AFORE requerido solo para Ahora y Futuro
-                </p>
               </section>
             )}
 
@@ -1680,7 +1667,7 @@ export default function Home() {
 
             {/* Validations — collapsible */}
             <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
-              <DetailToggle label="Datos de Venta" defaultOpen={false} section>
+              <DetailToggle label="Fin. Mod. 40 Retroactivo" defaultOpen={false} section>
               <div className="space-y-2 sm:space-y-2.5">
                 {/* Ley 73 */}
                 <div className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5">
@@ -1694,14 +1681,16 @@ export default function Home() {
 
                 {/* Semanas Cotizadas — age-based ranges */}
                 <div className="px-3.5 sm:px-4 py-2 sm:py-2.5 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <p className={`font-medium text-xs sm:text-sm ${cumpleSemanas ? "" : "text-wv-red"}`}>Semanas Cotizadas</p>
-                      <span className={`text-[10px] sm:text-xs font-mono font-semibold ${cumpleSemanas ? "" : "text-wv-red"}`}>
-                        {formatInt(semanasTotales)} / {formatInt(semanasMinimas)} mínimo
-                      </span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <p className={`font-medium text-xs sm:text-sm ${cumpleSemanas ? "" : "text-wv-red"}`}>Semanas Cotizadas</p>
+                        <span className={`text-[10px] sm:text-xs font-mono font-semibold ${cumpleSemanas ? "" : "text-wv-red"}`}>
+                          {formatInt(semanasTotales)} / {formatInt(semanasMinimas)} mínimo
+                        </span>
+                      </div>
                     </div>
 
-                    <DetailToggle>
+                    <DetailToggle label="">
                       <div className="rounded-lg border border-wv-border overflow-hidden font-sans">
                         <table className="w-full text-[10px] sm:text-xs">
                           <thead>
@@ -1748,13 +1737,20 @@ export default function Home() {
 
                 {/* Saldo AFORE */}
                 <div className="px-3.5 sm:px-4 py-2 sm:py-2.5 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <p className={`font-medium text-xs sm:text-sm ${cumpleAfore ? "" : "text-wv-red"}`}>Saldo AFORE</p>
-                      <span className={`text-[10px] sm:text-xs font-mono font-semibold ${cumpleAfore ? "" : "text-wv-red"}`}>
-                        {formatMXN(saldoAfore)}
-                      </span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <p className={`font-medium text-xs sm:text-sm ${cumpleAfore ? "" : "text-wv-red"}`}>Saldo AFORE</p>
+                        <span className={`text-[10px] sm:text-xs font-mono font-semibold ${cumpleAfore ? "" : "text-wv-red"}`}>
+                          {formatMXN(saldoAfore)}
+                        </span>
+                      </div>
                     </div>
-                    <DetailToggle>
+                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] sm:text-xs text-muted-foreground">
+                      <span>Sin trabajar: {sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.dias}d` : "—"}</span>
+                      <span>Requerido: {formatMXN(montoRequerido)}</span>
+                      <span>Saldo actual: {formatMXN(saldoAfore)}</span>
+                    </div>
+                    <DetailToggle label="">
                       <p className="text-muted-foreground/70 mb-1 font-sans">Rango de edad: {rangoEdadLabel(rangosEdad, semanasRangoIndex)}</p>
                       <div className="rounded-lg border border-wv-border overflow-hidden font-sans">
                         <table className="w-full text-[10px] sm:text-xs">
