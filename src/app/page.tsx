@@ -2191,6 +2191,79 @@ export default function Home() {
                   </section>
                 )}
 
+                {/* Guión de Ventas — condicional según acreditación */}
+                {(acreditaAhora || acreditaFuturo || acreditaRecuperacion || actMinAcredita || comp500Acredita) && (
+                  <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
+                    <DetailToggle label="Guión de Ventas" defaultOpen={false} section>
+                      <div className="px-4 sm:px-5 space-y-4 text-xs sm:text-sm leading-relaxed">
+                        {(acreditaAhora || acreditaFuturo) && escenarios && (
+                          <>
+                            <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground">Situación Deseada — Financiamiento Mod. 40 Retroactivo</p>
+                            <div className="space-y-1.5">
+                              <div className="flex gap-2"><span className="text-muted-foreground">Semanas cotizadas</span><span className="font-mono font-semibold">{formatInt(semanasTotales)}</span></div>
+                              <div className="flex gap-2"><span className="text-muted-foreground">Promedio salarial</span><span className="font-mono font-semibold">{formatMXN(result.salaryAverage.promedio)} día / {formatMXN(result.salaryAverage.promedio * 30)} mes</span></div>
+                              <div className="flex gap-2"><span className="text-muted-foreground">Pensión actual</span><span className="font-mono font-semibold">{formatMXN(escenarios.pensionActual.pensionNeta)}</span></div>
+                              <div className="flex gap-2"><span className="text-muted-foreground">Pensión pronta</span><span className="font-mono font-semibold text-wv-green">{formatMXN(escenarios.pensionPronta.pensionNeta)}</span></div>
+                              {mesesRetroactivo !== null && mesesRetroactivo > 0 && (
+                                <div className="flex gap-2"><span className="text-muted-foreground">Tiempo retroactivo</span><span className="font-mono font-semibold">{mesesRetroactivo} meses</span></div>
+                              )}
+                            </div>
+                            <div className="border-t border-wv-border/30 pt-3 space-y-3 text-foreground/90">
+                              <p>Perfecto, y mira, ya tengo los resultados de la calculadora, cuentas con todos los requisitos para que te podamos financiar.</p>
+                              <p>Pero, actualmente, en este momento tienes <span className="font-semibold text-foreground">{formatInt(semanasTotales)}</span> semanas cotizadas y un promedio salarial de <span className="font-semibold text-foreground">{formatMXN(result.salaryAverage.promedio)}</span> pesos al día, eso te daría una pensión en este momento a los 60 años de <span className="font-semibold text-foreground">{formatMXN(escenarios.pensionActual.pensionNeta)}</span> pesos.</p>
+                              {mesesRetroactivo !== null && mesesRetroactivo > 0 && (
+                                <p>Escenario 1: si nosotros te financiamos tu modalidad 40 desde que dejaste de trabajar hasta este momento, son <span className="font-semibold text-foreground">{mesesRetroactivo} meses</span> de retroactivo, tu pensión quedaría aproximadamente en <span className="font-semibold text-wv-green">{formatMXN(escenarios.pensionPronta.pensionNeta)}</span> pesos al mes.</p>
+                              )}
+                              <p>Escenario 2: si te esperas 6 meses más de retroactivo, tu pensión subiría a <span className="font-semibold text-wv-cyan">{formatMXN(escenarios.pension6Meses.pensionNeta)}</span> pesos mensuales.</p>
+                              <p>Asesoría: hay veces que sí conviene esperar, hay otras que no, ya todo eso lo vas a ver en una asesoría con un experto en pensiones para que te defina qué es lo que más te conviene para incrementar tu pensión, ¿qué impacto tendría en tu vida, en tu retiro?, ¿qué cambiaría?</p>
+                              <p className="text-wv-cyan italic">¿Y, en lo personal? ¿Cómo sería esto para ti, cómo te sentirías si esto se diera de esa manera?</p>
+                            </div>
+                          </>
+                        )}
+
+                        {acreditaRecuperacion && !acreditaAhora && !acreditaFuturo && (
+                          <>
+                            <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pitch — Recuperación de Derechos</p>
+                            <div className="space-y-1.5">
+                              <div className="flex gap-2"><span className="text-muted-foreground"># Semanas</span><span className="font-mono font-semibold">{formatInt(semanasTotales)} sem / {Math.floor(semanasTotales * 7 / 365)}a {Math.floor((semanasTotales * 7 % 365) / 30)}m {(semanasTotales * 7 % 365) % 30}d</span></div>
+                              <div className="flex gap-2"><span className="text-muted-foreground">Conservación de derechos</span><span className="font-mono font-semibold">{formatInt(semanasConservacion)} sem / {Math.floor(diasConservacion / 365)}a {Math.floor((diasConservacion % 365) / 30)}m {(diasConservacion % 365) % 30}d</span></div>
+                              <div className="flex gap-2"><span className="text-muted-foreground">Tiempo sin trabajar</span><span className="font-mono font-semibold">{formatInt(Math.ceil(diasSinCotizar / 7))} sem / {sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.dias}d` : "—"}</span></div>
+                            </div>
+                            <div className="border-t border-wv-border/30 pt-3 space-y-3 text-foreground/90">
+                              <p>Perfecto, pues mira, en tu caso en este momento no tienes derechos de pensión porque llevas sin trabajar más del 25% de las semanas que tienes cotizadas, o sea, tienes <span className="font-semibold text-foreground">{sinTrabajar ? `${sinTrabajar.anos} años, ${sinTrabajar.meses} meses y ${sinTrabajar.dias} días` : "—"}</span> de tiempo sin trabajar, pero tu conservación era de <span className="font-semibold text-foreground">{Math.floor(diasConservacion / 365)} años, {Math.floor((diasConservacion % 365) / 30)} meses y {(diasConservacion % 365) % 30} días</span>, por eso es que ya perdiste tu derecho.</p>
+                              <p>La buena noticia es que se pueden recuperar tus derechos. Por eso aquí lo que hacemos es agendarte una asesoría con nuestro experto en pensiones para entender si se pueden recuperar tus derechos con modalidad 40 o tiene que ser con modalidad 10, que nos diga cuánto tiempo hay que cotizar para recuperar derechos y todo lo que se tiene que hacer para que alcances la mejor pensión para tu caso en específico.</p>
+                              <p className="text-wv-cyan italic">¿Para ti sería viable que revisara si pudiera agendarte esta asesoría con nuestro experto?</p>
+                            </div>
+                          </>
+                        )}
+
+                        {actMinAcredita && !acreditaAhora && !acreditaFuturo && !acreditaRecuperacion && escenarios && (
+                          <>
+                            <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pitch — Actualización de Pensión Mínima</p>
+                            <div className="border-t border-wv-border/30 pt-3 space-y-3 text-foreground/90">
+                              <p>Perfecto, pues mira, en tu caso, por la cantidad de semanas que tienes con tu promedio salarial de <span className="font-semibold text-foreground">{formatMXN(result.salaryAverage.promedio)}</span> pesos al día, alcanzas la pensión mínima. Muchas veces con modalidad 40 se puede elevar tu pensión, pero normalmente cuando se tiene debajo de cierta cantidad de semanas no conviene hacer la inversión en modalidad 40 porque sube muy poco la pensión.</p>
+                              <p>Pero sí les conviene cotizar porque en lugar de pensionarse con la pensión mínima de <span className="font-semibold text-foreground">{formatMXN(pensionMinimaVigente)}</span> pesos, al actualizar su pensión a este año puede aumentar entre 2 y 4 mil pesos extra al mes.</p>
+                              <p>Por eso, aquí lo que hacemos es agendarte una asesoría con nuestro experto en pensiones para saber si te conviene elevar tu pensión de <span className="font-semibold text-foreground">{formatMXN(escenarios.pensionActual.pensionNeta)}</span> o actualizar tu pensión a la nueva pensión mínima de este año.</p>
+                              <p className="text-wv-cyan italic">¿Para ti sería viable que revisara si pudiera agendarte esta asesoría con nuestro experto?</p>
+                            </div>
+                          </>
+                        )}
+
+                        {comp500Acredita && !acreditaAhora && !acreditaFuturo && !acreditaRecuperacion && !actMinAcredita && (
+                          <>
+                            <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pitch — Completar 500 Semanas</p>
+                            <div className="border-t border-wv-border/30 pt-3 space-y-3 text-foreground/90">
+                              <p>Perfecto, pues mira, en tu caso como los que tienen menos de 500 semanas cotizadas, lo que hacemos es financiar su modalidad 40 o modalidad 10, dependiendo tu caso, para alcanzar las 500 semanas y apoyarte a pensionarte con lo que más se pueda.</p>
+                              <p>En la mayoría de los casos se alcanza la pensión mínima, pero por lo menos ya empiezas a recibir <span className="font-semibold text-foreground">{formatMXN(pensionMinimaVigente)}</span> pesos al mes sin que les cueste de su dinero en este momento.</p>
+                              <p className="text-wv-cyan italic">¿Te gustaría que te agende una asesoría con nuestro experto para ver esto?</p>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </DetailToggle>
+                  </section>
+                )}
+
                 {/* Datos de Asesoría — collapsible */}
                 <section className="bg-wv-surface rounded-xl sm:rounded-[16px] border border-wv-border shadow-sm dark:shadow-none overflow-hidden">
                   <DetailToggle label="Datos de Asesoría" defaultOpen={false} section>
