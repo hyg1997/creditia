@@ -614,6 +614,19 @@ function SubCheck({
   );
 }
 
+function ToggleSection({ header, children }: { header: React.ReactNode; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="px-3.5 sm:px-4 py-2 sm:py-2.5">
+      <button type="button" onClick={() => setOpen(!open)} className="w-full flex items-center justify-between gap-2 cursor-pointer hover:opacity-80 transition-opacity">
+        <div className="flex-1 text-left">{header}</div>
+        <svg className={`w-3.5 h-3.5 text-muted-foreground transition-transform flex-shrink-0 ${open ? "rotate-90" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+      </button>
+      {open && <div className="mt-2 space-y-2">{children}</div>}
+    </div>
+  );
+}
+
 function DetailToggle({ label, children, defaultOpen = false, section = false }: { label?: string; children: React.ReactNode; defaultOpen?: boolean; section?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   if (section) {
@@ -635,15 +648,16 @@ function DetailToggle({ label, children, defaultOpen = false, section = false }:
       </div>
     );
   }
+  const arrowOnly = label === "";
   return (
-    <div className="mt-2 pt-2 border-t border-wv-border/50">
+    <div className={arrowOnly ? "" : "mt-2 pt-2 border-t border-wv-border/50"}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer font-medium"
+        className={`flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer font-medium ${arrowOnly ? "ml-auto text-xs p-1" : "text-[10px] sm:text-xs"}`}
       >
         <svg className={`w-3 h-3 transition-transform ${open ? "rotate-90" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
-        {label !== undefined ? label : "Ver cómo se calculó"}
+        {!arrowOnly && (label !== undefined ? label : "Ver cómo se calculó")}
       </button>
       {open && (
         <div className="mt-2 space-y-1 text-[9px] sm:text-[10px] text-muted-foreground font-mono leading-relaxed">
@@ -1680,17 +1694,16 @@ export default function Home() {
                 </div>
 
                 {/* Semanas Cotizadas — age-based ranges */}
-                <div className="px-3.5 sm:px-4 py-2 sm:py-2.5 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <p className={`font-medium text-xs sm:text-sm ${cumpleSemanas ? "" : "text-wv-red"}`}>Semanas Cotizadas</p>
-                        <span className={`text-[10px] sm:text-xs font-mono font-semibold ${cumpleSemanas ? "" : "text-wv-red"}`}>
-                          {formatInt(semanasTotales)} / {formatInt(semanasMinimas)} mínimo
-                        </span>
-                      </div>
+                <ToggleSection
+                  header={
+                    <div className="flex items-center gap-2">
+                      <p className={`font-medium text-xs sm:text-sm ${cumpleSemanas ? "" : "text-wv-red"}`}>Semanas Cotizadas</p>
+                      <span className={`text-[10px] sm:text-xs font-mono font-semibold ${cumpleSemanas ? "" : "text-wv-red"}`}>
+                        {formatInt(semanasTotales)} / {formatInt(semanasMinimas)} mínimo
+                      </span>
                     </div>
-
-                    <DetailToggle label="">
+                  }
+                >
                       <div className="rounded-lg border border-wv-border overflow-hidden font-sans">
                         <table className="w-full text-[10px] sm:text-xs">
                           <thead>
@@ -1732,25 +1745,26 @@ export default function Home() {
                           <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5 text-wv-green">{formatInt(result.header.semanasReintegradas)}</p>
                         </div>
                       </div>
-                    </DetailToggle>
-                </div>
+                </ToggleSection>
 
                 {/* Saldo AFORE */}
-                <div className="px-3.5 sm:px-4 py-2 sm:py-2.5 space-y-2">
-                    <div className="flex items-center justify-between">
+                <ToggleSection
+                  header={
+                    <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <p className={`font-medium text-xs sm:text-sm ${cumpleAfore ? "" : "text-wv-red"}`}>Saldo AFORE</p>
                         <span className={`text-[10px] sm:text-xs font-mono font-semibold ${cumpleAfore ? "" : "text-wv-red"}`}>
                           {formatMXN(saldoAfore)}
                         </span>
                       </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] sm:text-xs text-muted-foreground">
+                        <span>Sin trabajar: {sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.dias}d` : "—"}</span>
+                        <span>Requerido: {formatMXN(montoRequerido)}</span>
+                        <span>Saldo actual: {formatMXN(saldoAfore)}</span>
+                      </div>
                     </div>
-                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] sm:text-xs text-muted-foreground">
-                      <span>Sin trabajar: {sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.dias}d` : "—"}</span>
-                      <span>Requerido: {formatMXN(montoRequerido)}</span>
-                      <span>Saldo actual: {formatMXN(saldoAfore)}</span>
-                    </div>
-                    <DetailToggle label="">
+                  }
+                >
                       <p className="text-muted-foreground/70 mb-1 font-sans">Rango de edad: {rangoEdadLabel(rangosEdad, semanasRangoIndex)}</p>
                       <div className="rounded-lg border border-wv-border overflow-hidden font-sans">
                         <table className="w-full text-[10px] sm:text-xs">
@@ -1794,8 +1808,7 @@ export default function Home() {
                         )}
                         <StepRow label={cumpleAfore ? "Excedente" : "Faltante"} value={formatMXN(Math.abs(saldoAfore - montoRequerido))} highlight />
                       </div>
-                    </DetailToggle>
-                </div>
+                </ToggleSection>
 
                 {/* Modalidad (filtro) */}
                 {(modalidad === "mod10" || modalidad === "mod40") && (
