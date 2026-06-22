@@ -887,7 +887,7 @@ export default function Home() {
   const actMinCumpleEdad = edadEnMeses >= 59 * 12 + 8; // 59 años 8 meses
   const actMinCumpleSemanas = semanasTotales >= 470;
   const actMinCumpleSinCotizar = diasSinCotizar >= 730; // 2 años
-  const pensionMinimaVigente = getPensionMinima(ultimaCotizacion?.getUTCFullYear());
+  const pensionMinimaVigente = getPensionMinima();
 
   const initials = result?.header.nombre
     ? result.header.nombre
@@ -927,6 +927,8 @@ export default function Home() {
   // Completar 500 Semanas — criterios individuales
   const comp500CumpleEdad = edad >= 59;
   const comp500CumpleSemanas = semanasTotales >= 440;
+  const comp500CumpleMax = semanasTotales <= 490;
+  const comp500CumpleAfore = saldoAfore >= 40000;
 
   // Cascada de calificación: si alguna descalifica, las siguientes no califican
   const calDescalificado = calPensionado === "definitivo"
@@ -958,7 +960,7 @@ export default function Home() {
   const actMinAcredita = isLey73 && !calDescalificado && !acreditaAhora && !acreditaFuturo && !recupAcredita
     && actMinCumpleEdad && actMinCumpleSemanas && actMinCumpleSinCotizar && actMinCumplePension;
   const comp500Acredita = isLey73 && !calDescalificado && !acreditaAhora && !acreditaFuturo && !recupAcredita && !actMinAcredita
-    && comp500CumpleEdad && comp500CumpleSemanas;
+    && comp500CumpleEdad && comp500CumpleSemanas && comp500CumpleMax && comp500CumpleAfore;
 
   const calificacionLabel = !result ? null
     : calDescalificado ? (calPensionado === "definitivo" ? "Pensionado definitivo" : calNecesidad === "no" ? "No necesita financiamiento" : calSimulacion === "si_no_timbrados" ? "Simulación no timbrada" : calDemandas === "avanzada" ? "Demanda avanzada" : "Descalificado")
@@ -1551,19 +1553,23 @@ export default function Home() {
                         </table>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-1.5 sm:gap-2 mt-2 font-sans">
+                      <div className={`grid ${result.header.semanasDescontadas > 0 ? "grid-cols-3" : "grid-cols-1"} gap-1.5 sm:gap-2 mt-2 font-sans`}>
                         <div className="bg-muted/60 rounded-lg p-2">
                           <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Cotizadas</p>
                           <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5">{formatInt(result.header.totalSemanasCotizadas)}</p>
                         </div>
-                        <div className="bg-muted/60 rounded-lg p-2">
-                          <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Descontadas</p>
-                          <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5 text-wv-red">{formatInt(result.header.semanasDescontadas)}</p>
-                        </div>
-                        <div className="bg-muted/60 rounded-lg p-2">
-                          <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Reintegradas</p>
-                          <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5 text-wv-green">{formatInt(result.header.semanasReintegradas)}</p>
-                        </div>
+                        {result.header.semanasDescontadas > 0 && (
+                          <div className="bg-muted/60 rounded-lg p-2">
+                            <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Descontadas</p>
+                            <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5 text-wv-red">{formatInt(result.header.semanasDescontadas)}</p>
+                          </div>
+                        )}
+                        {result.header.semanasDescontadas > 0 && (
+                          <div className="bg-muted/60 rounded-lg p-2">
+                            <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Reintegradas</p>
+                            <p className="text-xs sm:text-sm font-semibold font-mono mt-0.5 text-wv-green">{formatInt(result.header.semanasReintegradas)}</p>
+                          </div>
+                        )}
                       </div>
                 </ToggleSection>
 
@@ -1643,7 +1649,7 @@ export default function Home() {
                               RP: {ultimoRegistro?.registroPatronal.slice(-2)}
                               {vigenciaMod40 && (
                                 <span className={vigenciaMod40Activa ? "text-wv-green" : "text-wv-red"}>
-                                  Vigencia: {vigenciaMod40.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
+                                  {vigenciaMod40Activa ? "Pierde derecho:" : "Perdió derecho:"} {vigenciaMod40.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
                                 </span>
                               )}
                             </span>
@@ -1819,9 +1825,9 @@ export default function Home() {
                           </div>
                           <div className="space-y-0.5">
                             <SubCheck pass={comp500CumpleEdad} label="Edad min. 59" value={`${edad} años`} />
-                            <SubCheck pass={comp500CumpleSemanas} label="Min. 440 semanas"
-                              value={`${formatInt(semanasTotales)} semanas`}
-                            />
+                            <SubCheck pass={comp500CumpleSemanas} label="Min. 440 semanas" value={`${formatInt(semanasTotales)} semanas`} />
+                            <SubCheck pass={comp500CumpleMax} label="Máx. 490 semanas" value={`${formatInt(semanasTotales)} semanas`} />
+                            <SubCheck pass={comp500CumpleAfore} label="AFORE min. $40,000" value={formatMXN(saldoAfore)} />
                           </div>
                         </div>
                       </div>
@@ -1838,7 +1844,7 @@ export default function Home() {
                           {perdioDerechos ? "Perdió derechos" : "Vigente"}
                           {vigenciaPension && (
                             <span className={`ml-2 ${vigenciaPensionActiva ? "text-wv-green" : "text-wv-red"}`}>
-                              Vigencia: {vigenciaPension.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
+                              {vigenciaPensionActiva ? "Pierde:" : "Perdió:"} {vigenciaPension.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
                             </span>
                           )}
                         </span>
@@ -2124,7 +2130,7 @@ export default function Home() {
                           <h2 className="text-xs sm:text-sm font-semibold tracking-tight uppercase sm:normal-case">Métricas del Expediente</h2>
                         </div>
                         <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
-                          <MetricCard label="Semanas Cotizadas" value={formatInt(semanasTotales)} sub={`Cotizadas: ${formatInt(result.header.totalSemanasCotizadas)} | Desc: ${formatInt(result.header.semanasDescontadas)} | Reint: ${formatInt(result.header.semanasReintegradas)}`} />
+                          <MetricCard label="Semanas Cotizadas" value={formatInt(semanasTotales)} sub={result.header.semanasDescontadas > 0 ? `Cotizadas: ${formatInt(result.header.totalSemanasCotizadas)} | Desc: ${formatInt(result.header.semanasDescontadas)} | Reint: ${formatInt(result.header.semanasReintegradas)}` : `${formatInt(result.header.totalSemanasCotizadas)} cotizadas`} />
                           <MetricCard label="Promedio Salarial" value={formatMXN(result.salaryAverage.promedio)} sub={`${formatMXN(result.salaryAverage.promedio * 30.4)} mensual`} />
                           {edadExacta && <MetricCard label="Edad Actual" value={`${edadExacta.anos} años`} sub={`${edadExacta.anos} años, ${edadExacta.meses} meses, ${edadExacta.dias} días`} />}
                         </div>
