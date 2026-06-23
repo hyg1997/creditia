@@ -922,7 +922,7 @@ export default function Home() {
     });
   }, [result, edadInfo?.fechaNacimiento, ultimaCotizacion, pensionResult, esposa, hijos]);
 
-  const actMinCumplePension = escenarios ? escenarios.pensionActual.pensionNeta < pensionMinimaVigente : false;
+  const actMinCumplePension = escenarios ? escenarios.pensionActual.pensionBruta < pensionMinimaVigente : false;
 
   // Completar 500 Semanas — criterios individuales
   const comp500CumpleEdad = edad >= 59;
@@ -957,9 +957,9 @@ export default function Home() {
   const acreditaAhora = pasaFiltrosBase && cumpleAforeConReintegro && asesoriaAhoraCumple && !perdioDerechos;
   const acreditaFuturo = pasaFiltrosBase && cumpleAforeConReintegro && asesoriaFuturoCumple && !perdioDerechos;
   const acreditaRecuperacion = isLey73 && !calDescalificado && !acreditaAhora && !acreditaFuturo && recupAcredita;
-  const actMinAcredita = isLey73 && !calDescalificado && !acreditaAhora && !acreditaFuturo && !recupAcredita
+  const actMinAcredita = isLey73 && !calDescalificado && !acreditaAhora && !acreditaFuturo && !acreditaRecuperacion
     && actMinCumpleEdad && actMinCumpleSemanas && actMinCumpleSinCotizar && actMinCumplePension;
-  const comp500Acredita = isLey73 && !calDescalificado && !acreditaAhora && !acreditaFuturo && !recupAcredita && !actMinAcredita
+  const comp500Acredita = isLey73 && !calDescalificado && !acreditaAhora && !acreditaFuturo && !acreditaRecuperacion && !actMinAcredita
     && comp500CumpleEdad && comp500CumpleSemanas && comp500CumpleMax && comp500CumpleAfore;
 
   const calificacionLabel = !result ? null
@@ -1648,8 +1648,10 @@ export default function Home() {
                             <span className="text-[10px] sm:text-xs font-mono text-muted-foreground flex items-center gap-2">
                               RP: {ultimoRegistro?.registroPatronal.slice(-2)}
                               {vigenciaMod40 && (
-                                <span className={vigenciaMod40Activa ? "text-wv-green" : "text-wv-red"}>
-                                  {vigenciaMod40Activa ? "Pierde derecho:" : "Perdió derecho:"} {vigenciaMod40.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
+                                <span className={mod10Cumple && vigenciaMod40Activa ? "text-wv-green" : vigenciaMod40Activa ? "text-amber-500" : "text-wv-red"}>
+                                  {vigenciaMod40Activa
+                                    ? (mod10Cumple ? "Pierde derecho:" : "No cumple — plazo hasta:")
+                                    : "Perdió derecho:"} {vigenciaMod40.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
                                 </span>
                               )}
                             </span>
@@ -1810,7 +1812,7 @@ export default function Home() {
                             <SubCheck pass={actMinCumpleEdad} label="Edad min. 59a 8m" value={edadExacta ? `${edadExacta.anos}a ${edadExacta.meses}m` : `${edad} años`} />
                             <SubCheck pass={actMinCumpleSemanas} label="Min. 470 semanas" value={`${formatInt(semanasTotales)} sem`} />
                             <SubCheck pass={actMinCumpleSinCotizar} label="Min. 2 años sin cotizar" value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m` : `${Math.floor(diasSinCotizar / 365)}a`} />
-                            <SubCheck pass={actMinCumplePension} label={`Pensión < mínima (${formatMXN(pensionMinimaVigente)})`} value={escenarios ? formatMXN(escenarios.pensionActual.pensionNeta) : "$0"} />
+                            <SubCheck pass={actMinCumplePension} label={`Pensión < mínima (${formatMXN(pensionMinimaVigente)})`} value={escenarios ? formatMXN(escenarios.pensionActual.pensionBruta) : "$0"} />
                           </div>
                         </div>
                       </div>
@@ -1842,9 +1844,14 @@ export default function Home() {
                         <p className={`font-medium text-xs sm:text-sm ${perdioDerechos ? "text-amber-500" : ""}`}>Derecho para poderte pensionar</p>
                         <span className={`text-[10px] sm:text-xs font-mono ${perdioDerechos ? "text-amber-500" : "text-muted-foreground"}`}>
                           {perdioDerechos ? "Perdió derechos" : "Vigente"}
-                          {vigenciaPension && (
+                          {vigenciaPension && !perdioDerechos && (
                             <span className={`ml-2 ${vigenciaPensionActiva ? "text-wv-green" : "text-wv-red"}`}>
                               {vigenciaPensionActiva ? "Pierde:" : "Perdió:"} {vigenciaPension.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
+                            </span>
+                          )}
+                          {perdioDerechos && rightsHistory?.lastLossDate && (
+                            <span className="ml-2 text-wv-red">
+                              Perdió: {rightsHistory.lastLossDate.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
                             </span>
                           )}
                         </span>
