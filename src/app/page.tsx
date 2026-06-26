@@ -2064,6 +2064,10 @@ export default function Home() {
                             <StatusBadge pass={acreditaAhora} labelPass="Acredita" labelFail="No acredita" />
                           </div>
                           <div className="space-y-0.5">
+                            <SubCheck pass={cumpleSemanas} label={`Min. ${formatInt(semanasMinimas)} semanas`} value={`${formatInt(semanasTotales)} sem`} />
+                            <SubCheck pass={cumpleModalidad} label="Cumple modalidad" value={modalidad === "mod10" ? (mod10Cumple ? "Mod10 ✓" : "Mod10 ✗") : modalidad === "mod40" ? (mod40Cumple ? "Mod40 ✓" : "Mod40 ✗") : "N/A"} />
+                            <SubCheck pass={cumpleAforeConReintegro} label="AFORE suficiente" value={modoManual ? "N/A" : `${formatMXN(saldoAforeConReintegro)} / ${formatMXN(montoRequerido)}`} />
+                            <SubCheck pass={!perdioDerechos} label="No perdió derechos" value={perdioDerechos ? "Perdió" : "Vigente"} />
                             <SubCheck pass={asesoriaAhoraCumpleEdad} label={rules.ahoraEdad.enabled ? `Edad min. ${rules.ahoraEdad.value}` : "Edad (desact.)"} value={`${edad} años`} />
                             <SubCheck pass={asesoriaAhoraCumpleMeses} label={rules.ahoraMeses.enabled ? `> ${rules.ahoraMeses.value} meses sin cotizar` : "Meses (desact.)"} value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : `${mesesSinCotizar} meses`} />
                           </div>
@@ -2077,6 +2081,10 @@ export default function Home() {
                             <StatusBadge pass={acreditaFuturo} labelPass="Acredita" labelFail="No acredita" />
                           </div>
                           <div className="space-y-0.5">
+                            <SubCheck pass={cumpleSemanas} label={`Min. ${formatInt(semanasMinimas)} semanas`} value={`${formatInt(semanasTotales)} sem`} />
+                            <SubCheck pass={cumpleModalidad} label="Cumple modalidad" value={modalidad === "mod10" ? (mod10Cumple ? "Mod10 ✓" : "Mod10 ✗") : modalidad === "mod40" ? (mod40Cumple ? "Mod40 ✓" : "Mod40 ✗") : "N/A"} />
+                            <SubCheck pass={cumpleAforeConReintegro} label="AFORE suficiente" value={modoManual ? "N/A" : `${formatMXN(saldoAforeConReintegro)} / ${formatMXN(montoRequerido)}`} />
+                            <SubCheck pass={!perdioDerechos} label="No perdió derechos" value={perdioDerechos ? "Perdió" : "Vigente"} />
                             <SubCheck pass={asesoriaFuturoCumpleEdad} label={rules.futuroEdad.enabled ? `Edad min. ${rules.futuroEdad.value}` : "Edad (desact.)"} value={`${edad} años`} />
                             <SubCheck pass={asesoriaFuturoCumpleMeses} label={rules.futuroMeses.enabled ? `> ${rules.futuroMeses.value} meses sin cotizar` : "Meses (desact.)"} value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : `${mesesSinCotizar} meses`} />
                           </div>
