@@ -1063,10 +1063,12 @@ export default function Home() {
   const acreditaAhora = pasaFiltrosBase && cumpleAforeConReintegro && asesoriaAhoraCumple && !perdioDerechos;
   const acreditaFuturo = pasaFiltrosBase && cumpleAforeConReintegro && asesoriaFuturoCumple && !perdioDerechos;
   const acreditaRecuperacion = isLey73 && !calDescalificado && !acreditaAhora && !acreditaFuturo && recupAcredita;
+  const actMinCumplePropios = actMinCumpleEdad && actMinCumpleSemanas && actMinCumpleSinCotizar && actMinCumplePension;
   const actMinAcredita = isLey73 && !calDescalificado && !acreditaAhora && !acreditaFuturo && !acreditaRecuperacion
-    && actMinCumpleEdad && actMinCumpleSemanas && actMinCumpleSinCotizar && actMinCumplePension;
+    && actMinCumplePropios;
+  const comp500CumplePropios = comp500CumpleEdad && comp500CumpleSemanas && comp500CumpleMax && comp500CumpleAfore;
   const comp500Acredita = isLey73 && !calDescalificado && !acreditaAhora && !acreditaFuturo && !acreditaRecuperacion && !actMinAcredita
-    && comp500CumpleEdad && comp500CumpleSemanas && comp500CumpleMax && comp500CumpleAfore;
+    && comp500CumplePropios;
 
   const calificacionLabel = !result ? null
     : calDescalificado ? (calPensionado === "definitivo" ? "Pensionado definitivo" : calNecesidad === "no" ? "No necesita financiamiento" : calSimulacion === "si_no_timbrados" ? "Simulación no timbrada" : calDemandas === "avanzada" ? "Demanda avanzada" : "Descalificado")
@@ -1419,16 +1421,25 @@ export default function Home() {
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] sm:text-xs text-muted-foreground">Fecha de nacimiento</label>
-                    <div className="flex gap-1">
-                      <input type="text" inputMode="numeric" value={manualFechaNacDia || ""} placeholder="DD"
-                        onChange={(e) => setManualFechaNacDia(Math.min(31, parseInt(e.target.value.replace(/[^0-9]/g, "")) || 0))}
-                        className="w-10 rounded-lg border border-wv-border bg-background px-1.5 py-1.5 text-xs font-mono text-center focus:outline-none focus:ring-1 focus:ring-wv-cyan" />
-                      <input type="text" inputMode="numeric" value={manualFechaNacMes || ""} placeholder="MM"
-                        onChange={(e) => setManualFechaNacMes(Math.min(12, parseInt(e.target.value.replace(/[^0-9]/g, "")) || 0))}
-                        className="w-10 rounded-lg border border-wv-border bg-background px-1.5 py-1.5 text-xs font-mono text-center focus:outline-none focus:ring-1 focus:ring-wv-cyan" />
-                      <input type="text" inputMode="numeric" value={manualFechaNacAnio || ""} placeholder="AAAA"
-                        onChange={(e) => setManualFechaNacAnio(parseInt(e.target.value.replace(/[^0-9]/g, "")) || 0)}
-                        className="w-14 rounded-lg border border-wv-border bg-background px-1.5 py-1.5 text-xs font-mono text-center focus:outline-none focus:ring-1 focus:ring-wv-cyan" />
+                    <div className="flex gap-1 items-end">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-[8px] text-muted-foreground">Día</span>
+                        <input type="text" inputMode="numeric" value={manualFechaNacDia || ""} placeholder="DD"
+                          onChange={(e) => setManualFechaNacDia(Math.min(31, parseInt(e.target.value.replace(/[^0-9]/g, "")) || 0))}
+                          className="w-10 rounded-lg border border-wv-border bg-background px-1.5 py-1.5 text-xs font-mono text-center focus:outline-none focus:ring-1 focus:ring-wv-cyan" />
+                      </div>
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-[8px] text-muted-foreground">Mes</span>
+                        <input type="text" inputMode="numeric" value={manualFechaNacMes || ""} placeholder="MM"
+                          onChange={(e) => setManualFechaNacMes(Math.min(12, parseInt(e.target.value.replace(/[^0-9]/g, "")) || 0))}
+                          className="w-10 rounded-lg border border-wv-border bg-background px-1.5 py-1.5 text-xs font-mono text-center focus:outline-none focus:ring-1 focus:ring-wv-cyan" />
+                      </div>
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-[8px] text-muted-foreground">Año</span>
+                        <input type="text" inputMode="numeric" value={manualFechaNacAnio || ""} placeholder="AAAA"
+                          onChange={(e) => setManualFechaNacAnio(parseInt(e.target.value.replace(/[^0-9]/g, "")) || 0)}
+                          className="w-14 rounded-lg border border-wv-border bg-background px-1.5 py-1.5 text-xs font-mono text-center focus:outline-none focus:ring-1 focus:ring-wv-cyan" />
+                      </div>
                     </div>
                   </div>
                   <div className="space-y-1">
@@ -2109,13 +2120,16 @@ export default function Home() {
                     {/* Fila 2: Recuperar Derechos + Act. Pensión Mínima + Completar 500 */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5 p-2 sm:p-2.5 rounded-xl border border-wv-border/50 bg-wv-surface/30">
                       <div
-                        className={`rounded-lg overflow-hidden border ${acreditaRecuperacion ? "border-wv-green/40 bg-gradient-to-br from-wv-surface to-wv-green/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
+                        className={`rounded-lg overflow-hidden border ${acreditaRecuperacion ? "border-wv-green/40 bg-gradient-to-br from-wv-surface to-wv-green/5" : recupAcredita ? "border-amber-500/40 bg-gradient-to-br from-wv-surface to-amber-500/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
                       >
                         <div className="px-3 sm:px-4 py-2 sm:py-3 space-y-1.5">
                           <div className="flex items-center justify-between gap-2">
                             <p className="font-semibold text-xs sm:text-sm">Recuperar Derechos</p>
-                            <StatusBadge pass={acreditaRecuperacion} labelPass="Acredita" labelFail="No acredita" />
+                            <StatusBadge pass={acreditaRecuperacion} labelPass="Acredita" labelFail={recupAcredita ? "Cumple criterios" : "No acredita"} />
                           </div>
+                          {recupAcredita && !acreditaRecuperacion && (
+                            <p className="text-[9px] text-amber-400">Ya acredita por otra vía</p>
+                          )}
                           <div className="space-y-0.5">
                             <SubCheck pass={perdioDerechos} label="Perdió derechos" value={perdioDerechos ? "Sí" : "No"} />
                             <SubCheck pass={recupCumpleEdad} label={rules.recupEdad.enabled ? `Edad min. ${rules.recupEdad.value}a ${rules.recupEdadMeses.value}m` : "Edad (desact.)"} value={edadExacta ? `${edadExacta.anos}a ${edadExacta.meses}m` : `${edad} años`} />
@@ -2126,30 +2140,36 @@ export default function Home() {
                       </div>
 
                       <div
-                        className={`rounded-lg overflow-hidden border ${actMinAcredita ? "border-wv-green/40 bg-gradient-to-br from-wv-surface to-wv-green/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
+                        className={`rounded-lg overflow-hidden border ${actMinAcredita ? "border-wv-green/40 bg-gradient-to-br from-wv-surface to-wv-green/5" : actMinCumplePropios ? "border-amber-500/40 bg-gradient-to-br from-wv-surface to-amber-500/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
                       >
                         <div className="px-3 sm:px-4 py-2 sm:py-3 space-y-1.5">
                           <div className="flex items-center justify-between gap-2">
                             <p className="font-semibold text-xs sm:text-sm">Actualización Pensión Mínima</p>
-                            <StatusBadge pass={actMinAcredita} labelPass="Acredita" labelFail="No acredita" />
+                            <StatusBadge pass={actMinAcredita} labelPass="Acredita" labelFail={actMinCumplePropios ? "Cumple criterios" : "No acredita"} />
                           </div>
+                          {actMinCumplePropios && !actMinAcredita && (
+                            <p className="text-[9px] text-amber-400">Ya acredita por otra vía</p>
+                          )}
                           <div className="space-y-0.5">
                             <SubCheck pass={actMinCumpleEdad} label={rules.actMinEdad.enabled ? `Edad min. ${rules.actMinEdad.value}a ${rules.actMinEdadMeses.value}m` : "Edad (desact.)"} value={edadExacta ? `${edadExacta.anos}a ${edadExacta.meses}m` : `${edad} años`} />
                             <SubCheck pass={actMinCumpleSemanas} label={rules.actMinSemanas.enabled ? `Min. ${formatInt(rules.actMinSemanas.value)} semanas` : "Semanas (desact.)"} value={`${formatInt(semanasTotales)} sem`} />
                             <SubCheck pass={actMinCumpleSinCotizar} label={rules.actMinSinCotizar.enabled ? `Min. ${formatInt(rules.actMinSinCotizar.value)} días sin cot.` : "Sin cotizar (desact.)"} value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m` : `${Math.floor(diasSinCotizar / 365)}a`} />
-                            <SubCheck pass={actMinCumplePension} label={modoManual ? "Pensión mínima (asumido)" : `Pensión < mínima (${formatMXN(pensionMinimaVigente)})`} value={modoManual ? "Sí" : (escenarios ? formatMXN(escenarios.pensionActual.pensionBruta) : "$0")} />
+                            <SubCheck pass={actMinCumplePension} label={modoManual ? "Pensión mínima (asumido)" : `Pensión < mínima (${formatMXN(pensionMinimaVigente)})`} value={modoManual ? "N/A" : (escenarios ? formatMXN(escenarios.pensionActual.pensionBruta) : "$0")} />
                           </div>
                         </div>
                       </div>
 
                       <div
-                        className={`rounded-lg overflow-hidden border ${comp500Acredita ? "border-wv-green/40 bg-gradient-to-br from-wv-surface to-wv-green/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
+                        className={`rounded-lg overflow-hidden border ${comp500Acredita ? "border-wv-green/40 bg-gradient-to-br from-wv-surface to-wv-green/5" : comp500CumplePropios ? "border-amber-500/40 bg-gradient-to-br from-wv-surface to-amber-500/5" : "border-wv-red/30 bg-gradient-to-br from-wv-surface to-wv-red/5"}`}
                       >
                         <div className="px-3 sm:px-4 py-2 sm:py-3 space-y-1.5">
                           <div className="flex items-center justify-between gap-2">
                             <p className="font-semibold text-xs sm:text-sm">Completar 500 Semanas</p>
-                            <StatusBadge pass={comp500Acredita} labelPass="Sí califica" labelFail="No califica" />
+                            <StatusBadge pass={comp500Acredita} labelPass="Sí califica" labelFail={comp500CumplePropios ? "Cumple criterios" : "No califica"} />
                           </div>
+                          {comp500CumplePropios && !comp500Acredita && (
+                            <p className="text-[9px] text-amber-400">Ya acredita por otra vía</p>
+                          )}
                           <div className="space-y-0.5">
                             <SubCheck pass={comp500CumpleEdad} label={rules.comp500Edad.enabled ? `Edad min. ${rules.comp500Edad.value}a ${rules.comp500EdadMeses.value}m` : "Edad (desact.)"} value={edadExacta ? `${edadExacta.anos}a ${edadExacta.meses}m` : `${edad} años`} />
                             <SubCheck pass={comp500CumpleSemanas} label={rules.comp500SemMin.enabled ? `Min. ${formatInt(rules.comp500SemMin.value)} semanas` : "Sem. mín (desact.)"} value={`${formatInt(semanasTotales)} semanas`} />
