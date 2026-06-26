@@ -281,7 +281,7 @@ function recalcPromedio(
   mod40End: Date,
   mod40Salary: number,
 ): number {
-  const mod40Days = daysBetween(mod40Start, mod40End) + 1;
+  const mod40Days = Math.max(0, daysBetween(mod40Start, mod40End) + 1);
   const mod40Weeks = mod40Days / 7;
 
   let remainingWeeks = 250;

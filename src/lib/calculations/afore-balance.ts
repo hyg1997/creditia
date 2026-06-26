@@ -145,6 +145,7 @@ const SMGDF_POR_AÑO: Record<number, number> = {
 };
 
 const UMA_DIARIO_POR_AÑO: Record<number, number> = {
+  2016: 73.04,
   2017: 75.49,
   2018: 80.60,
   2019: 84.49,
@@ -159,7 +160,7 @@ const UMA_DIARIO_POR_AÑO: Record<number, number> = {
 
 function getUMA(year: number): number {
   if (year in UMA_DIARIO_POR_AÑO) return UMA_DIARIO_POR_AÑO[year];
-  if (year < 2017) return 75.49;
+  if (year < 2016) return 73.04;
   return UMA_DIARIO_POR_AÑO[2026] ?? 117.65;
 }
 
@@ -177,11 +178,11 @@ function calcCuotaSocialDiaria(salarioDiario: number, year: number): number {
   const uma = getUMA(year);
   const umas = salarioDiario / uma;
 
-  if (umas <= 1.0) return salarioDiario * 0.0377;
-  if (umas <= 4.0) return salarioDiario * 0.0283;
-  if (umas <= 7.0) return salarioDiario * 0.0189;
-  if (umas <= 10.0) return salarioDiario * 0.0094;
-  if (umas <= 15.0) return salarioDiario * 0.0;
+  if (umas <= 1.0) return uma * 0.0377;
+  if (umas <= 4.0) return uma * 0.0283;
+  if (umas <= 7.0) return uma * 0.0189;
+  if (umas <= 10.0) return uma * 0.0094;
+  if (umas <= 15.0) return uma * 0.0;
   return 0;
 }
 
@@ -284,7 +285,7 @@ export function calculateAfore(
   const totalRCVBruto = ceavTrabajador.total + ceavPatron.total + cuotaSocial.total;
 
   if (semanasDescontadas > 0 && semanasReconocidas > 0) {
-    const factor = 1 - semanasDescontadas / semanasReconocidas;
+    const factor = Math.max(0, 1 - semanasDescontadas / semanasReconocidas);
     for (const s of [sar92, vivienda92, retiro, ceavTrabajador, ceavPatron, cuotaSocial, vivienda97]) {
       s.aportaciones = Math.round(s.aportaciones * factor * 100) / 100;
       s.rendimientos = Math.round(s.rendimientos * factor * 100) / 100;

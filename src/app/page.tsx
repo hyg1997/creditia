@@ -201,8 +201,56 @@ function findCostoRango(semanas: number, edadRangoIdx: number, tiers: number[], 
   return { costoAnual: costos[costos.length - 1], rangoIndex: tiers.length - 1 };
 }
 
-const LIMITE_MOD10_DIAS = 4 * 365 + 11 * 30 + 22;
-const LIMITE_MOD40_DIAS = 11 * 30 + 12;
+const LIMITE_MOD10_DIAS_DEFAULT = 4 * 365 + 11 * 30 + 22;
+const LIMITE_MOD40_DIAS_DEFAULT = 11 * 30 + 12;
+
+interface RuleConfig { enabled: boolean; value: number }
+interface RulesState {
+  ahoraEdad: RuleConfig; ahoraMeses: RuleConfig;
+  futuroEdad: RuleConfig; futuroMeses: RuleConfig;
+  recupEdad: RuleConfig; recupSemMin: RuleConfig; recupAfore: RuleConfig;
+  actMinEdad: RuleConfig; actMinEdadMeses: RuleConfig; actMinSemanas: RuleConfig; actMinSinCotizar: RuleConfig;
+  comp500Edad: RuleConfig; comp500SemMin: RuleConfig; comp500SemMax: RuleConfig; comp500Afore: RuleConfig;
+  mod40Dias: RuleConfig; mod10Dias: RuleConfig;
+}
+const DEFAULT_RULES: RulesState = {
+  ahoraEdad: { enabled: true, value: 60 },
+  ahoraMeses: { enabled: true, value: 12 },
+  futuroEdad: { enabled: true, value: 59 },
+  futuroMeses: { enabled: true, value: 5 },
+  recupEdad: { enabled: true, value: 59 },
+  recupSemMin: { enabled: true, value: 430 },
+  recupAfore: { enabled: true, value: 40000 },
+  actMinEdad: { enabled: true, value: 59 },
+  actMinEdadMeses: { enabled: true, value: 8 },
+  actMinSemanas: { enabled: true, value: 470 },
+  actMinSinCotizar: { enabled: true, value: 730 },
+  comp500Edad: { enabled: true, value: 59 },
+  comp500SemMin: { enabled: true, value: 440 },
+  comp500SemMax: { enabled: true, value: 490 },
+  comp500Afore: { enabled: true, value: 40000 },
+  mod40Dias: { enabled: true, value: LIMITE_MOD40_DIAS_DEFAULT },
+  mod10Dias: { enabled: true, value: LIMITE_MOD10_DIAS_DEFAULT },
+};
+
+function RuleInput({ label, rule, ruleKey, onChange }: {
+  label: string; rule: RuleConfig; ruleKey: string;
+  onChange: (key: string, field: "enabled" | "value", val: boolean | number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <input type="checkbox" checked={rule.enabled}
+        onChange={(e) => onChange(ruleKey, "enabled", e.target.checked)}
+        className="h-3.5 w-3.5 rounded border-wv-border accent-wv-cyan" />
+      <span className={`text-[10px] sm:text-xs ${rule.enabled ? "text-foreground" : "text-muted-foreground line-through"} min-w-[100px]`}>{label}</span>
+      <input type="text" inputMode="numeric"
+        value={rule.value ? formatInt(rule.value) : ""}
+        onChange={(e) => { const raw = e.target.value.replace(/[^0-9]/g, ""); onChange(ruleKey, "value", raw ? parseInt(raw) : 0); }}
+        disabled={!rule.enabled}
+        className="w-20 rounded-lg border border-wv-border bg-background px-2 py-1 text-[10px] sm:text-xs font-mono focus:outline-none focus:ring-1 focus:ring-wv-cyan disabled:opacity-40" />
+    </div>
+  );
+}
 
 function rangoEdadLabel(rangos: RangoEdad[], idx: number): string {
   if (rangos.length <= 1) return "Todas las edades";
@@ -753,6 +801,31 @@ export default function Home() {
   const [calDemandas, setCalDemandas] = useState<"no" | "conciliacion" | "avanzada" | null>(null);
   const [calReintegroManual, setCalReintegroManual] = useState<number | null>(null);
 
+  // AFORE manual override
+  const [tieneEstadoCuentaAfore, setTieneEstadoCuentaAfore] = useState(false);
+  const [saldoAforeManual, setSaldoAforeManual] = useState(0);
+
+  // Registro manual
+  const [modoManual, setModoManual] = useState(false);
+  const [manualInicioMes, setManualInicioMes] = useState(0);
+  const [manualInicioAnio, setManualInicioAnio] = useState(1995);
+  const [manualFechaNacDia, setManualFechaNacDia] = useState(1);
+  const [manualFechaNacMes, setManualFechaNacMes] = useState(1);
+  const [manualFechaNacAnio, setManualFechaNacAnio] = useState(1965);
+  const [manualUltimaCotMes, setManualUltimaCotMes] = useState(1);
+  const [manualUltimaCotAnio, setManualUltimaCotAnio] = useState(2020);
+  const [manualSemanas, setManualSemanas] = useState(0);
+  const [manualPromedio, setManualPromedio] = useState(0);
+
+  // Reglas configurables
+  const [rules, setRules] = useState<RulesState>({ ...DEFAULT_RULES });
+  const updateRule = useCallback((key: string, field: "enabled" | "value", val: boolean | number) => {
+    setRules(prev => {
+      const current = prev[key as keyof RulesState];
+      return { ...prev, [key]: { ...current, [field]: val } };
+    });
+  }, []);
+
   const handleTextExtracted = useCallback(async (text: string) => {
     setIsProcessing(true);
     setError(null);
@@ -787,6 +860,9 @@ export default function Home() {
     setCalSimulacion(null);
     setCalDemandas(null);
     setCalReintegroManual(null);
+    setTieneEstadoCuentaAfore(false);
+    setSaldoAforeManual(0);
+    setModoManual(false);
   }, []);
 
   const isLey73 = result?.regimen === "ley73";
@@ -801,11 +877,12 @@ export default function Home() {
   const viviendaBruta = result ? result.afore.totalVivienda : 0;
   const descuentoCredito = tieneCredito ? Math.min(montoCredito, viviendaBruta) : 0;
   const viviendaAjustada = viviendaBruta - descuentoCredito;
-  const saldoAfore = result
+  const saldoAforeCalculado = result
     ? result.afore.totalSAR92 +
       result.afore.retiro.total +
       viviendaAjustada
     : 0;
+  const saldoAfore = tieneEstadoCuentaAfore && saldoAforeManual > 0 ? saldoAforeManual : saldoAforeCalculado;
   const sinTrabajar = result ? calcSinTrabajar(result.records) : null;
   const { costoAnual, rangoIndex: costoRangoIndex } = findCostoRango(semanasTotales, semanasRangoIndex, costoTiers, costoMatrix);
   const costoDiario = costoAnual / 365;
@@ -823,16 +900,18 @@ export default function Home() {
     : null;
   const diasSinCotizar = sinTrabajar ? sinTrabajar.dias : 0;
 
-  const mod10CumpleTiempo = diasSinCotizar <= LIMITE_MOD10_DIAS;
+  const LIMITE_MOD10_DIAS = rules.mod10Dias.value;
+  const LIMITE_MOD40_DIAS = rules.mod40Dias.value;
+  const mod10CumpleTiempo = !rules.mod10Dias.enabled || diasSinCotizar <= LIMITE_MOD10_DIAS;
   const semanasDetail =
     result && ultimaCotizacion
       ? calcSemanasEn5Anos(result.records, ultimaCotizacion)
       : null;
   const semanasEn5Anos = semanasDetail?.semanas ?? 0;
-  const mod10CumpleSemanas = semanasEn5Anos >= 52;
+  const mod10CumpleSemanas = modoManual || semanasEn5Anos >= 52;
   const mod10Cumple = mod10CumpleTiempo && mod10CumpleSemanas;
 
-  const mod40Cumple = diasSinCotizar <= LIMITE_MOD40_DIAS;
+  const mod40Cumple = !rules.mod40Dias.enabled || diasSinCotizar <= LIMITE_MOD40_DIAS;
 
   const mesesSinCotizar = sinTrabajar
     ? sinTrabajar.anos * 12 + sinTrabajar.meses
@@ -845,13 +924,13 @@ export default function Home() {
       }, parseDDMMYYYY(result.records[0].fechaAlta))
     : null;
 
-  const asesoriaAhoraCumpleEdad = edad >= 60;
-  const asesoriaAhoraCumpleMeses = mesesSinCotizar > 12;
+  const asesoriaAhoraCumpleEdad = !rules.ahoraEdad.enabled || edad >= rules.ahoraEdad.value;
+  const asesoriaAhoraCumpleMeses = !rules.ahoraMeses.enabled || mesesSinCotizar > rules.ahoraMeses.value;
   const asesoriaAhoraCumple =
     asesoriaAhoraCumpleEdad && asesoriaAhoraCumpleMeses;
 
-  const asesoriaFuturoCumpleEdad = edad >= 59;
-  const asesoriaFuturoCumpleMeses = mesesSinCotizar > 5;
+  const asesoriaFuturoCumpleEdad = !rules.futuroEdad.enabled || edad >= rules.futuroEdad.value;
+  const asesoriaFuturoCumpleMeses = !rules.futuroMeses.enabled || mesesSinCotizar > rules.futuroMeses.value;
   const asesoriaFuturoCumple =
     asesoriaFuturoCumpleEdad && asesoriaFuturoCumpleMeses;
 
@@ -877,16 +956,16 @@ export default function Home() {
   const anosDesdePerdida = diasDesdePerdida / 365;
 
   // Filtros de negocio para financiamiento de recuperación
-  const recupCumpleEdad = edad >= 59;
-  const recupCumpleSemanas = semanasTotales >= 430;
-  const recupCumpleAfore = saldoAfore >= 40000;
+  const recupCumpleEdad = !rules.recupEdad.enabled || edad >= rules.recupEdad.value;
+  const recupCumpleSemanas = !rules.recupSemMin.enabled || semanasTotales >= rules.recupSemMin.value;
+  const recupCumpleAfore = modoManual || !rules.recupAfore.enabled || saldoAfore >= rules.recupAfore.value;
   const recupAcredita = perdioDerechos && recupCumpleEdad && recupCumpleSemanas && recupCumpleAfore;
 
   // Actualización de Pensión Mínima — 4ta opción de financiamiento
   const edadEnMeses = edadExacta ? edadExacta.anos * 12 + edadExacta.meses : 0;
-  const actMinCumpleEdad = edadEnMeses >= 59 * 12 + 8; // 59 años 8 meses
-  const actMinCumpleSemanas = semanasTotales >= 470;
-  const actMinCumpleSinCotizar = diasSinCotizar >= 730; // 2 años
+  const actMinCumpleEdad = !rules.actMinEdad.enabled || edadEnMeses >= rules.actMinEdad.value * 12 + rules.actMinEdadMeses.value;
+  const actMinCumpleSemanas = !rules.actMinSemanas.enabled || semanasTotales >= rules.actMinSemanas.value;
+  const actMinCumpleSinCotizar = !rules.actMinSinCotizar.enabled || diasSinCotizar >= rules.actMinSinCotizar.value;
   const pensionMinimaVigente = getPensionMinima();
 
   const initials = result?.header.nombre
@@ -922,13 +1001,13 @@ export default function Home() {
     });
   }, [result, edadInfo?.fechaNacimiento, ultimaCotizacion, pensionResult, esposa, hijos]);
 
-  const actMinCumplePension = escenarios ? escenarios.pensionActual.pensionBruta < pensionMinimaVigente : false;
+  const actMinCumplePension = modoManual ? true : (escenarios ? escenarios.pensionActual.pensionBruta < pensionMinimaVigente : false);
 
   // Completar 500 Semanas — criterios individuales
-  const comp500CumpleEdad = edad >= 59;
-  const comp500CumpleSemanas = semanasTotales >= 440;
-  const comp500CumpleMax = semanasTotales <= 490;
-  const comp500CumpleAfore = saldoAfore >= 40000;
+  const comp500CumpleEdad = !rules.comp500Edad.enabled || edad >= rules.comp500Edad.value;
+  const comp500CumpleSemanas = !rules.comp500SemMin.enabled || semanasTotales >= rules.comp500SemMin.value;
+  const comp500CumpleMax = !rules.comp500SemMax.enabled || semanasTotales <= rules.comp500SemMax.value;
+  const comp500CumpleAfore = modoManual || !rules.comp500Afore.enabled || saldoAfore >= rules.comp500Afore.value;
 
   // Cascada de calificación: si alguna descalifica, las siguientes no califican
   const calDescalificado = calPensionado === "definitivo"
@@ -939,7 +1018,7 @@ export default function Home() {
   // Reintegro efectivo para cálculos — se suma al AFORE solo para Ahora/Futuro
   const montoReintegroEfectivo = calReintegroManual ?? (result?.retirosDesempleo?.totalDevolver ?? 0);
   const saldoAforeConReintegro = saldoAfore + montoReintegroEfectivo;
-  const cumpleAforeConReintegro = saldoAforeConReintegro >= montoRequerido;
+  const cumpleAforeConReintegro = modoManual || saldoAforeConReintegro >= montoRequerido;
 
   // Vigencia de derechos Mod 40 y pensión
   const vigenciaMod40 = ultimaCotizacion
@@ -1196,6 +1275,66 @@ export default function Home() {
                 </table>
               </div>
             </div>
+
+            {/* Reglas de Calificación Configurables */}
+            <div>
+              <p className="text-[9px] sm:text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Reglas de Calificación</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {/* Ahora */}
+                <div className="bg-background rounded-lg border border-wv-border/50 p-3 space-y-2">
+                  <p className="text-[10px] sm:text-xs font-semibold text-wv-cyan">Ahora</p>
+                  <RuleInput label="Edad min." rule={rules.ahoraEdad} ruleKey="ahoraEdad" onChange={updateRule} />
+                  <RuleInput label="Meses sin cot. >" rule={rules.ahoraMeses} ruleKey="ahoraMeses" onChange={updateRule} />
+                </div>
+                {/* Futuro */}
+                <div className="bg-background rounded-lg border border-wv-border/50 p-3 space-y-2">
+                  <p className="text-[10px] sm:text-xs font-semibold text-wv-cyan">Futuro</p>
+                  <RuleInput label="Edad min." rule={rules.futuroEdad} ruleKey="futuroEdad" onChange={updateRule} />
+                  <RuleInput label="Meses sin cot. >" rule={rules.futuroMeses} ruleKey="futuroMeses" onChange={updateRule} />
+                </div>
+                {/* Recuperar Derechos */}
+                <div className="bg-background rounded-lg border border-wv-border/50 p-3 space-y-2">
+                  <p className="text-[10px] sm:text-xs font-semibold text-wv-cyan">Recuperar Derechos</p>
+                  <RuleInput label="Edad min." rule={rules.recupEdad} ruleKey="recupEdad" onChange={updateRule} />
+                  <RuleInput label="Semanas min." rule={rules.recupSemMin} ruleKey="recupSemMin" onChange={updateRule} />
+                  <RuleInput label="AFORE min." rule={rules.recupAfore} ruleKey="recupAfore" onChange={updateRule} />
+                </div>
+                {/* ActMin */}
+                <div className="bg-background rounded-lg border border-wv-border/50 p-3 space-y-2">
+                  <p className="text-[10px] sm:text-xs font-semibold text-wv-cyan">Act. Pensión Mínima</p>
+                  <div className="flex items-center gap-2">
+                    <input type="checkbox" checked={rules.actMinEdad.enabled}
+                      onChange={(e) => updateRule("actMinEdad", "enabled", e.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-wv-border accent-wv-cyan" />
+                    <span className={`text-[10px] sm:text-xs ${rules.actMinEdad.enabled ? "text-foreground" : "text-muted-foreground line-through"} min-w-[60px]`}>Edad min.</span>
+                    <input type="text" inputMode="numeric" value={rules.actMinEdad.value || ""} disabled={!rules.actMinEdad.enabled}
+                      onChange={(e) => updateRule("actMinEdad", "value", parseInt(e.target.value.replace(/[^0-9]/g, "")) || 0)}
+                      className="w-12 rounded-lg border border-wv-border bg-background px-2 py-1 text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-wv-cyan disabled:opacity-40" />
+                    <span className="text-[10px] text-muted-foreground">a</span>
+                    <input type="text" inputMode="numeric" value={rules.actMinEdadMeses.value || ""} disabled={!rules.actMinEdad.enabled}
+                      onChange={(e) => updateRule("actMinEdadMeses", "value", parseInt(e.target.value.replace(/[^0-9]/g, "")) || 0)}
+                      className="w-10 rounded-lg border border-wv-border bg-background px-2 py-1 text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-wv-cyan disabled:opacity-40" />
+                    <span className="text-[10px] text-muted-foreground">m</span>
+                  </div>
+                  <RuleInput label="Semanas min." rule={rules.actMinSemanas} ruleKey="actMinSemanas" onChange={updateRule} />
+                  <RuleInput label="Días sin cot." rule={rules.actMinSinCotizar} ruleKey="actMinSinCotizar" onChange={updateRule} />
+                </div>
+                {/* Comp500 */}
+                <div className="bg-background rounded-lg border border-wv-border/50 p-3 space-y-2">
+                  <p className="text-[10px] sm:text-xs font-semibold text-wv-cyan">Completar 500 Sem.</p>
+                  <RuleInput label="Edad min." rule={rules.comp500Edad} ruleKey="comp500Edad" onChange={updateRule} />
+                  <RuleInput label="Semanas min." rule={rules.comp500SemMin} ruleKey="comp500SemMin" onChange={updateRule} />
+                  <RuleInput label="Semanas máx." rule={rules.comp500SemMax} ruleKey="comp500SemMax" onChange={updateRule} />
+                  <RuleInput label="AFORE min." rule={rules.comp500Afore} ruleKey="comp500Afore" onChange={updateRule} />
+                </div>
+                {/* Vigencia Mod 40 */}
+                <div className="bg-background rounded-lg border border-wv-border/50 p-3 space-y-2">
+                  <p className="text-[10px] sm:text-xs font-semibold text-wv-cyan">Vigencia Mod. 40</p>
+                  <RuleInput label="Mod40 (días)" rule={rules.mod40Dias} ruleKey="mod40Dias" onChange={updateRule} />
+                  <RuleInput label="Mod10 (días)" rule={rules.mod10Dias} ruleKey="mod10Dias" onChange={updateRule} />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1229,10 +1368,138 @@ export default function Home() {
               </p>
             </div>
 
-            <PdfUpload
-              onTextExtracted={handleTextExtracted}
-              isProcessing={isProcessing}
-            />
+            {!modoManual ? (
+              <>
+                <PdfUpload
+                  onTextExtracted={handleTextExtracted}
+                  isProcessing={isProcessing}
+                />
+                <div className="text-center">
+                  <button type="button" onClick={() => setModoManual(true)}
+                    className="text-xs text-wv-cyan hover:text-wv-cyan/80 font-medium transition-colors">
+                    Registro manual
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="bg-wv-surface rounded-xl border border-wv-border p-4 sm:p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold">Registro Manual</p>
+                  <button type="button" onClick={() => setModoManual(false)}
+                    className="text-xs text-muted-foreground hover:text-foreground">Subir PDF</button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] sm:text-xs text-muted-foreground">Inicio cotización</label>
+                    <div className="flex gap-1.5">
+                      <select value={manualInicioMes} onChange={(e) => setManualInicioMes(Number(e.target.value))}
+                        className="flex-1 rounded-lg border border-wv-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-wv-cyan">
+                        {["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"].map((m, i) => (
+                          <option key={i} value={i}>{m}</option>
+                        ))}
+                      </select>
+                      <input type="text" inputMode="numeric" value={manualInicioAnio || ""} placeholder="1995"
+                        onChange={(e) => setManualInicioAnio(parseInt(e.target.value.replace(/[^0-9]/g, "")) || 0)}
+                        className="w-16 rounded-lg border border-wv-border bg-background px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-wv-cyan" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] sm:text-xs text-muted-foreground">Fecha de nacimiento</label>
+                    <div className="flex gap-1">
+                      <input type="text" inputMode="numeric" value={manualFechaNacDia || ""} placeholder="DD"
+                        onChange={(e) => setManualFechaNacDia(Math.min(31, parseInt(e.target.value.replace(/[^0-9]/g, "")) || 0))}
+                        className="w-10 rounded-lg border border-wv-border bg-background px-1.5 py-1.5 text-xs font-mono text-center focus:outline-none focus:ring-1 focus:ring-wv-cyan" />
+                      <input type="text" inputMode="numeric" value={manualFechaNacMes || ""} placeholder="MM"
+                        onChange={(e) => setManualFechaNacMes(Math.min(12, parseInt(e.target.value.replace(/[^0-9]/g, "")) || 0))}
+                        className="w-10 rounded-lg border border-wv-border bg-background px-1.5 py-1.5 text-xs font-mono text-center focus:outline-none focus:ring-1 focus:ring-wv-cyan" />
+                      <input type="text" inputMode="numeric" value={manualFechaNacAnio || ""} placeholder="AAAA"
+                        onChange={(e) => setManualFechaNacAnio(parseInt(e.target.value.replace(/[^0-9]/g, "")) || 0)}
+                        className="w-14 rounded-lg border border-wv-border bg-background px-1.5 py-1.5 text-xs font-mono text-center focus:outline-none focus:ring-1 focus:ring-wv-cyan" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] sm:text-xs text-muted-foreground">Última cotización</label>
+                    <div className="flex gap-1.5">
+                      <select value={manualUltimaCotMes} onChange={(e) => setManualUltimaCotMes(Number(e.target.value))}
+                        className="flex-1 rounded-lg border border-wv-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-wv-cyan">
+                        {["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"].map((m, i) => (
+                          <option key={i} value={i + 1}>{m}</option>
+                        ))}
+                      </select>
+                      <input type="text" inputMode="numeric" value={manualUltimaCotAnio || ""} placeholder="2020"
+                        onChange={(e) => setManualUltimaCotAnio(parseInt(e.target.value.replace(/[^0-9]/g, "")) || 0)}
+                        className="w-16 rounded-lg border border-wv-border bg-background px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-wv-cyan" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] sm:text-xs text-muted-foreground">Semanas cotizadas</label>
+                    <NumericInput value={manualSemanas} onChange={setManualSemanas} />
+                  </div>
+                  <div className="col-span-2 space-y-1">
+                    <label className="text-[10px] sm:text-xs text-muted-foreground">Promedio salarial diario</label>
+                    <NumericInput value={manualPromedio} onChange={setManualPromedio} prefix="$" className="max-w-[200px]" />
+                  </div>
+                </div>
+                <button type="button"
+                  onClick={() => {
+                    const fechaNac = new Date(Date.UTC(manualFechaNacAnio, manualFechaNacMes - 1, manualFechaNacDia));
+                    const ultimaCot = new Date(Date.UTC(manualUltimaCotAnio, manualUltimaCotMes - 1, 15));
+                    const isLey73Manual = manualInicioAnio < 1997 || (manualInicioAnio === 1997 && manualInicioMes < 6);
+                    const curpYear = manualFechaNacAnio.toString().slice(-2);
+                    const curpMM = String(manualFechaNacMes).padStart(2, "0");
+                    const curpDD = String(manualFechaNacDia).padStart(2, "0");
+                    const fakeCurp = `XXXX${curpYear}${curpMM}${curpDD}XXXXXX00`;
+                    const manualResult: ApiResult = {
+                      regimen: isLey73Manual ? "ley73" : "ley97",
+                      header: {
+                        nombre: "Registro Manual",
+                        nss: "",
+                        curp: fakeCurp,
+                        totalSemanasCotizadas: manualSemanas,
+                        semanasReconocidas: manualSemanas,
+                        semanasDescontadas: 0,
+                        semanasReintegradas: 0,
+                      },
+                      records: [{
+                        patron: "Manual",
+                        registroPatronal: "Y0000000000",
+                        entidadFederativa: "",
+                        fechaAlta: `01/${String(manualInicioMes + 1).padStart(2, "0")}/${manualInicioAnio}`,
+                        fechaBaja: `15/${String(manualUltimaCotMes).padStart(2, "0")}/${manualUltimaCotAnio}`,
+                        salarioBaseCotizacion: manualPromedio,
+                      }],
+                      salaryAverage: {
+                        promedio: manualPromedio,
+                        periods: [{
+                          fechaAlta: `01/${String(manualInicioMes + 1).padStart(2, "0")}/${manualInicioAnio}`,
+                          fechaBaja: `15/${String(manualUltimaCotMes).padStart(2, "0")}/${manualUltimaCotAnio}`,
+                          salarioDiario: manualPromedio,
+                          dias: manualSemanas * 7,
+                          semanasTotales: manualSemanas,
+                          semanasContadas: Math.min(manualSemanas, 250),
+                          resultado: Math.min(manualSemanas, 250) * manualPromedio,
+                        }],
+                      },
+                      afore: {
+                        sar92: { aportaciones: 0, rendimientos: 0, total: 0 },
+                        vivienda92: { aportaciones: 0, rendimientos: 0, total: 0 },
+                        retiro: { aportaciones: 0, rendimientos: 0, total: 0 },
+                        ceavTrabajador: { aportaciones: 0, rendimientos: 0, total: 0 },
+                        ceavPatron: { aportaciones: 0, rendimientos: 0, total: 0 },
+                        cuotaSocial: { aportaciones: 0, rendimientos: 0, total: 0 },
+                        vivienda97: { aportaciones: 0, rendimientos: 0, total: 0 },
+                        totalRCV: 0, totalRCVBruto: 0, totalSAR92: 0, totalVivienda: 0, saldoTotal: 0,
+                      },
+                      retirosDesempleo: { retiros: [], totalDevolver: 0 },
+                    };
+                    setResult(manualResult);
+                  }}
+                  disabled={!manualSemanas || !manualPromedio || !manualFechaNacAnio}
+                  className="w-full py-2.5 rounded-xl bg-wv-cyan text-background font-semibold text-sm transition-colors hover:bg-wv-cyan/90 disabled:opacity-40 disabled:cursor-not-allowed">
+                  Calcular
+                </button>
+              </div>
+            )}
 
             {error && (
               <Alert variant="destructive">
@@ -1376,7 +1643,7 @@ export default function Home() {
                 )}
 
                 {/* 3. Simulación */}
-                {(
+                {calPensionado !== "definitivo" && calNecesidad !== "no" && (
                   <div className="space-y-1.5">
                     <p className="text-xs sm:text-sm font-medium">¿Tiene simulación de pensión?</p>
                     <div className="flex flex-wrap gap-1.5">
@@ -1400,7 +1667,7 @@ export default function Home() {
                 )}
 
                 {/* 4. Demandas */}
-                {(
+                {calPensionado !== "definitivo" && calNecesidad !== "no" && calSimulacion !== "si_no_timbrados" && (
                   <div className="space-y-1.5">
                     <p className="text-xs sm:text-sm font-medium">¿Tiene demandas?</p>
                     <div className="flex flex-wrap gap-1.5">
@@ -1424,7 +1691,7 @@ export default function Home() {
                 )}
 
                 {/* 5. Crédito INFONAVIT */}
-                {(
+                {!calDescalificado && (
                   <div className="space-y-1.5">
                     <p className="text-xs sm:text-sm font-medium">¿Tiene crédito INFONAVIT?</p>
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -1459,7 +1726,43 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* 6. Reintegro de semanas */}
+                {/* 6. Estado de cuenta AFORE */}
+                {!calDescalificado && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs sm:text-sm font-medium">¿Tiene estado de cuenta de AFORE?</p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button type="button" onClick={() => { setTieneEstadoCuentaAfore(false); setSaldoAforeManual(0); }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${!tieneEstadoCuentaAfore ? "bg-wv-green/20 border-wv-green text-wv-green" : "border-wv-border text-muted-foreground hover:border-foreground"}`}>
+                        No
+                      </button>
+                      <button type="button" onClick={() => setTieneEstadoCuentaAfore(true)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${tieneEstadoCuentaAfore ? "bg-wv-cyan/20 border-wv-cyan text-wv-cyan" : "border-wv-border text-muted-foreground hover:border-foreground"}`}>
+                        Sí
+                      </button>
+                      {tieneEstadoCuentaAfore && (
+                        <div className="flex items-center gap-2 ml-2">
+                          <span className="text-xs text-muted-foreground">Saldo AFORE a regresar:</span>
+                          <div className="relative">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={saldoAforeManual ? formatInt(saldoAforeManual) : ""}
+                              onChange={(e) => {
+                                const raw = e.target.value.replace(/[^0-9]/g, "");
+                                setSaldoAforeManual(raw ? Math.max(0, Number(raw)) : 0);
+                              }}
+                              placeholder="0"
+                              className="w-32 rounded-lg border border-wv-border bg-background pl-6 pr-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-wv-cyan focus:border-transparent"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* 7. Reintegro de semanas */}
                 {result.header.semanasDescontadas > 0 && (
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-2">
@@ -1586,7 +1889,7 @@ export default function Home() {
                       <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] sm:text-xs text-muted-foreground">
                         <span>Sin trabajar: {sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : "—"}</span>
                         <span>Requerido: {formatMXN(montoRequerido)}</span>
-                        <span>Saldo actual: {formatMXN(saldoAfore)}</span>
+                        <span>Saldo actual: {formatMXN(saldoAfore)}{tieneEstadoCuentaAfore && saldoAforeManual > 0 ? " (manual)" : ""}</span>
                       </div>
                     </div>
                   }
@@ -1659,7 +1962,7 @@ export default function Home() {
                           <div className="space-y-1.5">
                             <SubCheck
                               pass={mod10CumpleTiempo}
-                              label="Conservación (máx. 4a 11m 22d)"
+                              label={`Conservación (máx. ${formatDiasCompleto(LIMITE_MOD10_DIAS)})`}
                               value={`${formatDiasCompleto(diasSinCotizar)} (${diasSinCotizar} días)`}
                             />
                             <SubCheck
@@ -1761,8 +2064,8 @@ export default function Home() {
                             <StatusBadge pass={acreditaAhora} labelPass="Acredita" labelFail="No acredita" />
                           </div>
                           <div className="space-y-0.5">
-                            <SubCheck pass={asesoriaAhoraCumpleEdad} label="Edad min. 60" value={`${edad} años`} />
-                            <SubCheck pass={asesoriaAhoraCumpleMeses} label="> 12 meses sin cotizar" value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : `${mesesSinCotizar} meses`} />
+                            <SubCheck pass={asesoriaAhoraCumpleEdad} label={rules.ahoraEdad.enabled ? `Edad min. ${rules.ahoraEdad.value}` : "Edad (desact.)"} value={`${edad} años`} />
+                            <SubCheck pass={asesoriaAhoraCumpleMeses} label={rules.ahoraMeses.enabled ? `> ${rules.ahoraMeses.value} meses sin cotizar` : "Meses (desact.)"} value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : `${mesesSinCotizar} meses`} />
                           </div>
                         </div>
                       </div>
@@ -1774,8 +2077,8 @@ export default function Home() {
                             <StatusBadge pass={acreditaFuturo} labelPass="Acredita" labelFail="No acredita" />
                           </div>
                           <div className="space-y-0.5">
-                            <SubCheck pass={asesoriaFuturoCumpleEdad} label="Edad min. 59" value={`${edad} años`} />
-                            <SubCheck pass={asesoriaFuturoCumpleMeses} label="> 5 meses sin cotizar" value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : `${mesesSinCotizar} meses`} />
+                            <SubCheck pass={asesoriaFuturoCumpleEdad} label={rules.futuroEdad.enabled ? `Edad min. ${rules.futuroEdad.value}` : "Edad (desact.)"} value={`${edad} años`} />
+                            <SubCheck pass={asesoriaFuturoCumpleMeses} label={rules.futuroMeses.enabled ? `> ${rules.futuroMeses.value} meses sin cotizar` : "Meses (desact.)"} value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : `${mesesSinCotizar} meses`} />
                           </div>
                         </div>
                       </div>
@@ -1793,9 +2096,9 @@ export default function Home() {
                           </div>
                           <div className="space-y-0.5">
                             <SubCheck pass={perdioDerechos} label="Perdió derechos" value={perdioDerechos ? "Sí" : "No"} />
-                            <SubCheck pass={recupCumpleEdad} label="Edad min. 59" value={`${edad} años`} />
-                            <SubCheck pass={recupCumpleSemanas} label="Min. 430 semanas" value={`${formatInt(semanasTotales)} sem`} />
-                            <SubCheck pass={recupCumpleAfore} label="AFORE min. $40,000" value={formatMXN(saldoAfore)} />
+                            <SubCheck pass={recupCumpleEdad} label={rules.recupEdad.enabled ? `Edad min. ${rules.recupEdad.value}` : "Edad (desact.)"} value={`${edad} años`} />
+                            <SubCheck pass={recupCumpleSemanas} label={rules.recupSemMin.enabled ? `Min. ${formatInt(rules.recupSemMin.value)} semanas` : "Semanas (desact.)"} value={`${formatInt(semanasTotales)} sem`} />
+                            <SubCheck pass={recupCumpleAfore} label={rules.recupAfore.enabled ? `AFORE min. ${formatMXN(rules.recupAfore.value)}` : "AFORE (desact.)"} value={modoManual ? "N/A" : formatMXN(saldoAfore)} />
                           </div>
                         </div>
                       </div>
@@ -1809,10 +2112,10 @@ export default function Home() {
                             <StatusBadge pass={actMinAcredita} labelPass="Acredita" labelFail="No acredita" />
                           </div>
                           <div className="space-y-0.5">
-                            <SubCheck pass={actMinCumpleEdad} label="Edad min. 59a 8m" value={edadExacta ? `${edadExacta.anos}a ${edadExacta.meses}m` : `${edad} años`} />
-                            <SubCheck pass={actMinCumpleSemanas} label="Min. 470 semanas" value={`${formatInt(semanasTotales)} sem`} />
-                            <SubCheck pass={actMinCumpleSinCotizar} label="Min. 2 años sin cotizar" value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m` : `${Math.floor(diasSinCotizar / 365)}a`} />
-                            <SubCheck pass={actMinCumplePension} label={`Pensión < mínima (${formatMXN(pensionMinimaVigente)})`} value={escenarios ? formatMXN(escenarios.pensionActual.pensionBruta) : "$0"} />
+                            <SubCheck pass={actMinCumpleEdad} label={rules.actMinEdad.enabled ? `Edad min. ${rules.actMinEdad.value}a ${rules.actMinEdadMeses.value}m` : "Edad (desact.)"} value={edadExacta ? `${edadExacta.anos}a ${edadExacta.meses}m` : `${edad} años`} />
+                            <SubCheck pass={actMinCumpleSemanas} label={rules.actMinSemanas.enabled ? `Min. ${formatInt(rules.actMinSemanas.value)} semanas` : "Semanas (desact.)"} value={`${formatInt(semanasTotales)} sem`} />
+                            <SubCheck pass={actMinCumpleSinCotizar} label={rules.actMinSinCotizar.enabled ? `Min. ${formatInt(rules.actMinSinCotizar.value)} días sin cot.` : "Sin cotizar (desact.)"} value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m` : `${Math.floor(diasSinCotizar / 365)}a`} />
+                            <SubCheck pass={actMinCumplePension} label={modoManual ? "Pensión mínima (asumido)" : `Pensión < mínima (${formatMXN(pensionMinimaVigente)})`} value={modoManual ? "Sí" : (escenarios ? formatMXN(escenarios.pensionActual.pensionBruta) : "$0")} />
                           </div>
                         </div>
                       </div>
@@ -1826,10 +2129,10 @@ export default function Home() {
                             <StatusBadge pass={comp500Acredita} labelPass="Sí califica" labelFail="No califica" />
                           </div>
                           <div className="space-y-0.5">
-                            <SubCheck pass={comp500CumpleEdad} label="Edad min. 59" value={`${edad} años`} />
-                            <SubCheck pass={comp500CumpleSemanas} label="Min. 440 semanas" value={`${formatInt(semanasTotales)} semanas`} />
-                            <SubCheck pass={comp500CumpleMax} label="Máx. 490 semanas" value={`${formatInt(semanasTotales)} semanas`} />
-                            <SubCheck pass={comp500CumpleAfore} label="AFORE min. $40,000" value={formatMXN(saldoAfore)} />
+                            <SubCheck pass={comp500CumpleEdad} label={rules.comp500Edad.enabled ? `Edad min. ${rules.comp500Edad.value}` : "Edad (desact.)"} value={`${edad} años`} />
+                            <SubCheck pass={comp500CumpleSemanas} label={rules.comp500SemMin.enabled ? `Min. ${formatInt(rules.comp500SemMin.value)} semanas` : "Sem. mín (desact.)"} value={`${formatInt(semanasTotales)} semanas`} />
+                            <SubCheck pass={comp500CumpleMax} label={rules.comp500SemMax.enabled ? `Máx. ${formatInt(rules.comp500SemMax.value)} semanas` : "Sem. máx (desact.)"} value={`${formatInt(semanasTotales)} semanas`} />
+                            <SubCheck pass={comp500CumpleAfore} label={rules.comp500Afore.enabled ? `AFORE min. ${formatMXN(rules.comp500Afore.value)}` : "AFORE (desact.)"} value={modoManual ? "N/A" : formatMXN(saldoAfore)} />
                           </div>
                         </div>
                       </div>
@@ -1844,9 +2147,9 @@ export default function Home() {
                         <p className={`font-medium text-xs sm:text-sm ${perdioDerechos ? "text-amber-500" : ""}`}>Derecho para poderte pensionar</p>
                         <span className={`text-[10px] sm:text-xs font-mono ${perdioDerechos ? "text-amber-500" : "text-muted-foreground"}`}>
                           {perdioDerechos ? "Perdió derechos" : "Vigente"}
-                          {vigenciaPension && !perdioDerechos && (
-                            <span className={`ml-2 ${vigenciaPensionActiva ? "text-wv-green" : "text-wv-red"}`}>
-                              {vigenciaPensionActiva ? "Pierde:" : "Perdió:"} {vigenciaPension.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
+                          {vigenciaPension && !perdioDerechos && vigenciaPensionActiva && (
+                            <span className="ml-2 text-wv-green">
+                              Pierde: {vigenciaPension.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })}
                             </span>
                           )}
                           {perdioDerechos && rightsHistory?.lastLossDate && (
@@ -1956,7 +2259,7 @@ export default function Home() {
                       )}
                       <div className="flex gap-2">
                         <span className="text-muted-foreground">Edad</span>
-                        <span className={`font-bold ${edad < 60 ? "text-wv-red" : ""}`}>
+                        <span className={`font-bold ${edad < rules.futuroEdad.value ? "text-wv-red" : ""}`}>
                           {edadExacta ? `${edadExacta.anos}a ${edadExacta.meses}m ${edadExacta.dias}d` : `${edad} años`}
                         </span>
                       </div>
