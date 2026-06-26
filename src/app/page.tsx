@@ -206,19 +206,22 @@ const LIMITE_MOD40_DIAS_DEFAULT = 11 * 30 + 12;
 
 interface RuleConfig { enabled: boolean; value: number }
 interface RulesState {
-  ahoraEdad: RuleConfig; ahoraMeses: RuleConfig;
-  futuroEdad: RuleConfig; futuroMeses: RuleConfig;
-  recupEdad: RuleConfig; recupSemMin: RuleConfig; recupAfore: RuleConfig;
+  ahoraEdad: RuleConfig; ahoraEdadMeses: RuleConfig; ahoraMeses: RuleConfig;
+  futuroEdad: RuleConfig; futuroEdadMeses: RuleConfig; futuroMeses: RuleConfig;
+  recupEdad: RuleConfig; recupEdadMeses: RuleConfig; recupSemMin: RuleConfig; recupAfore: RuleConfig;
   actMinEdad: RuleConfig; actMinEdadMeses: RuleConfig; actMinSemanas: RuleConfig; actMinSinCotizar: RuleConfig;
-  comp500Edad: RuleConfig; comp500SemMin: RuleConfig; comp500SemMax: RuleConfig; comp500Afore: RuleConfig;
+  comp500Edad: RuleConfig; comp500EdadMeses: RuleConfig; comp500SemMin: RuleConfig; comp500SemMax: RuleConfig; comp500Afore: RuleConfig;
   mod40Dias: RuleConfig; mod10Dias: RuleConfig;
 }
 const DEFAULT_RULES: RulesState = {
   ahoraEdad: { enabled: true, value: 60 },
+  ahoraEdadMeses: { enabled: true, value: 0 },
   ahoraMeses: { enabled: true, value: 12 },
   futuroEdad: { enabled: true, value: 59 },
+  futuroEdadMeses: { enabled: true, value: 0 },
   futuroMeses: { enabled: true, value: 5 },
   recupEdad: { enabled: true, value: 59 },
+  recupEdadMeses: { enabled: true, value: 0 },
   recupSemMin: { enabled: true, value: 430 },
   recupAfore: { enabled: true, value: 40000 },
   actMinEdad: { enabled: true, value: 59 },
@@ -226,6 +229,7 @@ const DEFAULT_RULES: RulesState = {
   actMinSemanas: { enabled: true, value: 470 },
   actMinSinCotizar: { enabled: true, value: 730 },
   comp500Edad: { enabled: true, value: 59 },
+  comp500EdadMeses: { enabled: true, value: 0 },
   comp500SemMin: { enabled: true, value: 440 },
   comp500SemMax: { enabled: true, value: 490 },
   comp500Afore: { enabled: true, value: 40000 },
@@ -248,6 +252,28 @@ function RuleInput({ label, rule, ruleKey, onChange }: {
         onChange={(e) => { const raw = e.target.value.replace(/[^0-9]/g, ""); onChange(ruleKey, "value", raw ? parseInt(raw) : 0); }}
         disabled={!rule.enabled}
         className="w-20 rounded-lg border border-wv-border bg-background px-2 py-1 text-[10px] sm:text-xs font-mono focus:outline-none focus:ring-1 focus:ring-wv-cyan disabled:opacity-40" />
+    </div>
+  );
+}
+
+function RuleInputEdad({ ruleEdad, ruleEdadMeses, edadKey, mesesKey, onChange }: {
+  ruleEdad: RuleConfig; ruleEdadMeses: RuleConfig; edadKey: string; mesesKey: string;
+  onChange: (key: string, field: "enabled" | "value", val: boolean | number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <input type="checkbox" checked={ruleEdad.enabled}
+        onChange={(e) => { onChange(edadKey, "enabled", e.target.checked); onChange(mesesKey, "enabled", e.target.checked); }}
+        className="h-3.5 w-3.5 rounded border-wv-border accent-wv-cyan" />
+      <span className={`text-[10px] sm:text-xs ${ruleEdad.enabled ? "text-foreground" : "text-muted-foreground line-through"} min-w-[60px]`}>Edad min.</span>
+      <input type="text" inputMode="numeric" value={ruleEdad.value || ""} disabled={!ruleEdad.enabled}
+        onChange={(e) => onChange(edadKey, "value", parseInt(e.target.value.replace(/[^0-9]/g, "")) || 0)}
+        className="w-12 rounded-lg border border-wv-border bg-background px-2 py-1 text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-wv-cyan disabled:opacity-40" />
+      <span className="text-[10px] text-muted-foreground">a</span>
+      <input type="text" inputMode="numeric" value={ruleEdadMeses.value || ""} disabled={!ruleEdad.enabled}
+        onChange={(e) => onChange(mesesKey, "value", parseInt(e.target.value.replace(/[^0-9]/g, "")) || 0)}
+        className="w-10 rounded-lg border border-wv-border bg-background px-2 py-1 text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-wv-cyan disabled:opacity-40" />
+      <span className="text-[10px] text-muted-foreground">m</span>
     </div>
   );
 }
@@ -924,12 +950,14 @@ export default function Home() {
       }, parseDDMMYYYY(result.records[0].fechaAlta))
     : null;
 
-  const asesoriaAhoraCumpleEdad = !rules.ahoraEdad.enabled || edad >= rules.ahoraEdad.value;
+  const edadEnMeses = edadExacta ? edadExacta.anos * 12 + edadExacta.meses : edad * 12;
+
+  const asesoriaAhoraCumpleEdad = !rules.ahoraEdad.enabled || edadEnMeses >= rules.ahoraEdad.value * 12 + rules.ahoraEdadMeses.value;
   const asesoriaAhoraCumpleMeses = !rules.ahoraMeses.enabled || mesesSinCotizar > rules.ahoraMeses.value;
   const asesoriaAhoraCumple =
     asesoriaAhoraCumpleEdad && asesoriaAhoraCumpleMeses;
 
-  const asesoriaFuturoCumpleEdad = !rules.futuroEdad.enabled || edad >= rules.futuroEdad.value;
+  const asesoriaFuturoCumpleEdad = !rules.futuroEdad.enabled || edadEnMeses >= rules.futuroEdad.value * 12 + rules.futuroEdadMeses.value;
   const asesoriaFuturoCumpleMeses = !rules.futuroMeses.enabled || mesesSinCotizar > rules.futuroMeses.value;
   const asesoriaFuturoCumple =
     asesoriaFuturoCumpleEdad && asesoriaFuturoCumpleMeses;
@@ -956,13 +984,12 @@ export default function Home() {
   const anosDesdePerdida = diasDesdePerdida / 365;
 
   // Filtros de negocio para financiamiento de recuperación
-  const recupCumpleEdad = !rules.recupEdad.enabled || edad >= rules.recupEdad.value;
+  const recupCumpleEdad = !rules.recupEdad.enabled || edadEnMeses >= rules.recupEdad.value * 12 + rules.recupEdadMeses.value;
   const recupCumpleSemanas = !rules.recupSemMin.enabled || semanasTotales >= rules.recupSemMin.value;
   const recupCumpleAfore = modoManual || !rules.recupAfore.enabled || saldoAfore >= rules.recupAfore.value;
   const recupAcredita = perdioDerechos && recupCumpleEdad && recupCumpleSemanas && recupCumpleAfore;
 
   // Actualización de Pensión Mínima — 4ta opción de financiamiento
-  const edadEnMeses = edadExacta ? edadExacta.anos * 12 + edadExacta.meses : 0;
   const actMinCumpleEdad = !rules.actMinEdad.enabled || edadEnMeses >= rules.actMinEdad.value * 12 + rules.actMinEdadMeses.value;
   const actMinCumpleSemanas = !rules.actMinSemanas.enabled || semanasTotales >= rules.actMinSemanas.value;
   const actMinCumpleSinCotizar = !rules.actMinSinCotizar.enabled || diasSinCotizar >= rules.actMinSinCotizar.value;
@@ -1004,7 +1031,7 @@ export default function Home() {
   const actMinCumplePension = modoManual ? true : (escenarios ? escenarios.pensionActual.pensionBruta < pensionMinimaVigente : false);
 
   // Completar 500 Semanas — criterios individuales
-  const comp500CumpleEdad = !rules.comp500Edad.enabled || edad >= rules.comp500Edad.value;
+  const comp500CumpleEdad = !rules.comp500Edad.enabled || edadEnMeses >= rules.comp500Edad.value * 12 + rules.comp500EdadMeses.value;
   const comp500CumpleSemanas = !rules.comp500SemMin.enabled || semanasTotales >= rules.comp500SemMin.value;
   const comp500CumpleMax = !rules.comp500SemMax.enabled || semanasTotales <= rules.comp500SemMax.value;
   const comp500CumpleAfore = modoManual || !rules.comp500Afore.enabled || saldoAfore >= rules.comp500Afore.value;
@@ -1283,46 +1310,33 @@ export default function Home() {
                 {/* Ahora */}
                 <div className="bg-background rounded-lg border border-wv-border/50 p-3 space-y-2">
                   <p className="text-[10px] sm:text-xs font-semibold text-wv-cyan">Ahora</p>
-                  <RuleInput label="Edad min." rule={rules.ahoraEdad} ruleKey="ahoraEdad" onChange={updateRule} />
+                  <RuleInputEdad ruleEdad={rules.ahoraEdad} ruleEdadMeses={rules.ahoraEdadMeses} edadKey="ahoraEdad" mesesKey="ahoraEdadMeses" onChange={updateRule} />
                   <RuleInput label="Meses sin cot. >" rule={rules.ahoraMeses} ruleKey="ahoraMeses" onChange={updateRule} />
                 </div>
                 {/* Futuro */}
                 <div className="bg-background rounded-lg border border-wv-border/50 p-3 space-y-2">
                   <p className="text-[10px] sm:text-xs font-semibold text-wv-cyan">Futuro</p>
-                  <RuleInput label="Edad min." rule={rules.futuroEdad} ruleKey="futuroEdad" onChange={updateRule} />
+                  <RuleInputEdad ruleEdad={rules.futuroEdad} ruleEdadMeses={rules.futuroEdadMeses} edadKey="futuroEdad" mesesKey="futuroEdadMeses" onChange={updateRule} />
                   <RuleInput label="Meses sin cot. >" rule={rules.futuroMeses} ruleKey="futuroMeses" onChange={updateRule} />
                 </div>
                 {/* Recuperar Derechos */}
                 <div className="bg-background rounded-lg border border-wv-border/50 p-3 space-y-2">
                   <p className="text-[10px] sm:text-xs font-semibold text-wv-cyan">Recuperar Derechos</p>
-                  <RuleInput label="Edad min." rule={rules.recupEdad} ruleKey="recupEdad" onChange={updateRule} />
+                  <RuleInputEdad ruleEdad={rules.recupEdad} ruleEdadMeses={rules.recupEdadMeses} edadKey="recupEdad" mesesKey="recupEdadMeses" onChange={updateRule} />
                   <RuleInput label="Semanas min." rule={rules.recupSemMin} ruleKey="recupSemMin" onChange={updateRule} />
                   <RuleInput label="AFORE min." rule={rules.recupAfore} ruleKey="recupAfore" onChange={updateRule} />
                 </div>
                 {/* ActMin */}
                 <div className="bg-background rounded-lg border border-wv-border/50 p-3 space-y-2">
                   <p className="text-[10px] sm:text-xs font-semibold text-wv-cyan">Act. Pensión Mínima</p>
-                  <div className="flex items-center gap-2">
-                    <input type="checkbox" checked={rules.actMinEdad.enabled}
-                      onChange={(e) => updateRule("actMinEdad", "enabled", e.target.checked)}
-                      className="h-3.5 w-3.5 rounded border-wv-border accent-wv-cyan" />
-                    <span className={`text-[10px] sm:text-xs ${rules.actMinEdad.enabled ? "text-foreground" : "text-muted-foreground line-through"} min-w-[60px]`}>Edad min.</span>
-                    <input type="text" inputMode="numeric" value={rules.actMinEdad.value || ""} disabled={!rules.actMinEdad.enabled}
-                      onChange={(e) => updateRule("actMinEdad", "value", parseInt(e.target.value.replace(/[^0-9]/g, "")) || 0)}
-                      className="w-12 rounded-lg border border-wv-border bg-background px-2 py-1 text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-wv-cyan disabled:opacity-40" />
-                    <span className="text-[10px] text-muted-foreground">a</span>
-                    <input type="text" inputMode="numeric" value={rules.actMinEdadMeses.value || ""} disabled={!rules.actMinEdad.enabled}
-                      onChange={(e) => updateRule("actMinEdadMeses", "value", parseInt(e.target.value.replace(/[^0-9]/g, "")) || 0)}
-                      className="w-10 rounded-lg border border-wv-border bg-background px-2 py-1 text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-wv-cyan disabled:opacity-40" />
-                    <span className="text-[10px] text-muted-foreground">m</span>
-                  </div>
+                  <RuleInputEdad ruleEdad={rules.actMinEdad} ruleEdadMeses={rules.actMinEdadMeses} edadKey="actMinEdad" mesesKey="actMinEdadMeses" onChange={updateRule} />
                   <RuleInput label="Semanas min." rule={rules.actMinSemanas} ruleKey="actMinSemanas" onChange={updateRule} />
                   <RuleInput label="Días sin cot." rule={rules.actMinSinCotizar} ruleKey="actMinSinCotizar" onChange={updateRule} />
                 </div>
                 {/* Comp500 */}
                 <div className="bg-background rounded-lg border border-wv-border/50 p-3 space-y-2">
                   <p className="text-[10px] sm:text-xs font-semibold text-wv-cyan">Completar 500 Sem.</p>
-                  <RuleInput label="Edad min." rule={rules.comp500Edad} ruleKey="comp500Edad" onChange={updateRule} />
+                  <RuleInputEdad ruleEdad={rules.comp500Edad} ruleEdadMeses={rules.comp500EdadMeses} edadKey="comp500Edad" mesesKey="comp500EdadMeses" onChange={updateRule} />
                   <RuleInput label="Semanas min." rule={rules.comp500SemMin} ruleKey="comp500SemMin" onChange={updateRule} />
                   <RuleInput label="Semanas máx." rule={rules.comp500SemMax} ruleKey="comp500SemMax" onChange={updateRule} />
                   <RuleInput label="AFORE min." rule={rules.comp500Afore} ruleKey="comp500Afore" onChange={updateRule} />
@@ -2068,7 +2082,7 @@ export default function Home() {
                             <SubCheck pass={cumpleModalidad} label="Cumple modalidad" value={modalidad === "mod10" ? (mod10Cumple ? "Mod10 ✓" : "Mod10 ✗") : modalidad === "mod40" ? (mod40Cumple ? "Mod40 ✓" : "Mod40 ✗") : "N/A"} />
                             <SubCheck pass={cumpleAforeConReintegro} label="AFORE suficiente" value={modoManual ? "N/A" : `${formatMXN(saldoAforeConReintegro)} / ${formatMXN(montoRequerido)}`} />
                             <SubCheck pass={!perdioDerechos} label="No perdió derechos" value={perdioDerechos ? "Perdió" : "Vigente"} />
-                            <SubCheck pass={asesoriaAhoraCumpleEdad} label={rules.ahoraEdad.enabled ? `Edad min. ${rules.ahoraEdad.value}` : "Edad (desact.)"} value={`${edad} años`} />
+                            <SubCheck pass={asesoriaAhoraCumpleEdad} label={rules.ahoraEdad.enabled ? `Edad min. ${rules.ahoraEdad.value}a ${rules.ahoraEdadMeses.value}m` : "Edad (desact.)"} value={edadExacta ? `${edadExacta.anos}a ${edadExacta.meses}m` : `${edad} años`} />
                             <SubCheck pass={asesoriaAhoraCumpleMeses} label={rules.ahoraMeses.enabled ? `> ${rules.ahoraMeses.value} meses sin cotizar` : "Meses (desact.)"} value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : `${mesesSinCotizar} meses`} />
                           </div>
                         </div>
@@ -2085,7 +2099,7 @@ export default function Home() {
                             <SubCheck pass={cumpleModalidad} label="Cumple modalidad" value={modalidad === "mod10" ? (mod10Cumple ? "Mod10 ✓" : "Mod10 ✗") : modalidad === "mod40" ? (mod40Cumple ? "Mod40 ✓" : "Mod40 ✗") : "N/A"} />
                             <SubCheck pass={cumpleAforeConReintegro} label="AFORE suficiente" value={modoManual ? "N/A" : `${formatMXN(saldoAforeConReintegro)} / ${formatMXN(montoRequerido)}`} />
                             <SubCheck pass={!perdioDerechos} label="No perdió derechos" value={perdioDerechos ? "Perdió" : "Vigente"} />
-                            <SubCheck pass={asesoriaFuturoCumpleEdad} label={rules.futuroEdad.enabled ? `Edad min. ${rules.futuroEdad.value}` : "Edad (desact.)"} value={`${edad} años`} />
+                            <SubCheck pass={asesoriaFuturoCumpleEdad} label={rules.futuroEdad.enabled ? `Edad min. ${rules.futuroEdad.value}a ${rules.futuroEdadMeses.value}m` : "Edad (desact.)"} value={edadExacta ? `${edadExacta.anos}a ${edadExacta.meses}m` : `${edad} años`} />
                             <SubCheck pass={asesoriaFuturoCumpleMeses} label={rules.futuroMeses.enabled ? `> ${rules.futuroMeses.value} meses sin cotizar` : "Meses (desact.)"} value={sinTrabajar ? `${sinTrabajar.anos}a ${sinTrabajar.meses}m ${sinTrabajar.diasRestantes}d` : `${mesesSinCotizar} meses`} />
                           </div>
                         </div>
@@ -2104,7 +2118,7 @@ export default function Home() {
                           </div>
                           <div className="space-y-0.5">
                             <SubCheck pass={perdioDerechos} label="Perdió derechos" value={perdioDerechos ? "Sí" : "No"} />
-                            <SubCheck pass={recupCumpleEdad} label={rules.recupEdad.enabled ? `Edad min. ${rules.recupEdad.value}` : "Edad (desact.)"} value={`${edad} años`} />
+                            <SubCheck pass={recupCumpleEdad} label={rules.recupEdad.enabled ? `Edad min. ${rules.recupEdad.value}a ${rules.recupEdadMeses.value}m` : "Edad (desact.)"} value={edadExacta ? `${edadExacta.anos}a ${edadExacta.meses}m` : `${edad} años`} />
                             <SubCheck pass={recupCumpleSemanas} label={rules.recupSemMin.enabled ? `Min. ${formatInt(rules.recupSemMin.value)} semanas` : "Semanas (desact.)"} value={`${formatInt(semanasTotales)} sem`} />
                             <SubCheck pass={recupCumpleAfore} label={rules.recupAfore.enabled ? `AFORE min. ${formatMXN(rules.recupAfore.value)}` : "AFORE (desact.)"} value={modoManual ? "N/A" : formatMXN(saldoAfore)} />
                           </div>
@@ -2137,7 +2151,7 @@ export default function Home() {
                             <StatusBadge pass={comp500Acredita} labelPass="Sí califica" labelFail="No califica" />
                           </div>
                           <div className="space-y-0.5">
-                            <SubCheck pass={comp500CumpleEdad} label={rules.comp500Edad.enabled ? `Edad min. ${rules.comp500Edad.value}` : "Edad (desact.)"} value={`${edad} años`} />
+                            <SubCheck pass={comp500CumpleEdad} label={rules.comp500Edad.enabled ? `Edad min. ${rules.comp500Edad.value}a ${rules.comp500EdadMeses.value}m` : "Edad (desact.)"} value={edadExacta ? `${edadExacta.anos}a ${edadExacta.meses}m` : `${edad} años`} />
                             <SubCheck pass={comp500CumpleSemanas} label={rules.comp500SemMin.enabled ? `Min. ${formatInt(rules.comp500SemMin.value)} semanas` : "Sem. mín (desact.)"} value={`${formatInt(semanasTotales)} semanas`} />
                             <SubCheck pass={comp500CumpleMax} label={rules.comp500SemMax.enabled ? `Máx. ${formatInt(rules.comp500SemMax.value)} semanas` : "Sem. máx (desact.)"} value={`${formatInt(semanasTotales)} semanas`} />
                             <SubCheck pass={comp500CumpleAfore} label={rules.comp500Afore.enabled ? `AFORE min. ${formatMXN(rules.comp500Afore.value)}` : "AFORE (desact.)"} value={modoManual ? "N/A" : formatMXN(saldoAfore)} />
